@@ -73,6 +73,7 @@ type Connection interface {
 // ConnectionManager holds a pool of connections of the same kind and routes
 // outgoing requests to the first healthy one.
 type ConnectionManager struct {
+	mu          sync.Mutex
 	connections []Connection
 	active      int
 }
@@ -87,6 +88,14 @@ func (manager *ConnectionManager) AddConnection(conn Connection) *ConnectionMana
 // It returns the raw response bytes (HTTP only), the connection's event stream
 // (WebSocket only), the configured timeout, and any transport error.
 func (manager *ConnectionManager) Send(data []byte) (result []byte, stream RStream, timeout time.Duration, err error) {
+	manager.mu.Lock()
+	defer manager.mu.Unlock()
+
+	if len(manager.connections) == 0 {
+		err = fmt.Errorf("no connections available")
+		return
+	}
+
 	for index := manager.active; index < len(manager.connections); index++ {
 		manager.active = index
 
@@ -96,6 +105,9 @@ func (manager *ConnectionManager) Send(data []byte) (result []byte, stream RStre
 			timeout = manager.connections[index].Timeout()
 			return
 		}
+	}
+	if err == nil {
+		err = fmt.Errorf("no connections available")
 	}
 	return
 }
@@ -253,7 +265,9 @@ func (connection *WsConnection) connect() error {
 
 	ctx := context.Background()
 	if connection.timeout > 0 {
-		ctx, _ = context.WithTimeout(context.Background(), connection.timeout)
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(context.Background(), connection.timeout)
+		defer cancel()
 	}
 
 	conn, _, _, err := ws.Dial(ctx, connection.resource)
@@ -269,27 +283,27 @@ func (connection *WsConnection) connect() error {
 	}
 	connection.connected = true
 
-	go connection.listen()
-	go connection.keepAlive()
+	go connection.listen(conn)
+	go connection.keepAlive(conn)
 
 	return nil
 }
 
-func (connection *WsConnection) listen() {
+func (connection *WsConnection) listen(wsConn net.Conn) {
 	for {
-		data, op, err := wsutil.ReadServerData(connection.ws)
+		data, op, err := wsutil.ReadServerData(wsConn)
 		if err != nil {
-			connection.close()
+			connection.closeConn(wsConn)
 			return
 		}
 
 		switch op {
 		case ws.OpClose:
-			connection.close()
+			connection.closeConn(wsConn)
 			return
 		case ws.OpPing:
 			connection.writeMu.Lock()
-			_ = wsutil.WriteClientMessage(connection.ws, ws.OpPong, data)
+			_ = wsutil.WriteClientMessage(wsConn, ws.OpPong, data)
 			connection.writeMu.Unlock()
 			continue
 		case ws.OpPong:
@@ -304,7 +318,7 @@ func (connection *WsConnection) listen() {
 	}
 }
 
-func (connection *WsConnection) keepAlive() {
+func (connection *WsConnection) keepAlive(wsConn net.Conn) {
 	timer := time.NewTimer(connection.keepAlivePeriod)
 	defer timer.Stop()
 
@@ -319,9 +333,9 @@ func (connection *WsConnection) keepAlive() {
 			connection.writeMu.Lock()
 			if connection.keepAliveMessageFunctor != nil {
 				msg := connection.keepAliveMessageFunctor()
-				_ = wsutil.WriteClientText(connection.ws, msg)
+				_ = wsutil.WriteClientText(wsConn, msg)
 			} else {
-				_ = wsutil.WriteClientMessage(connection.ws, ws.OpPing, nil)
+				_ = wsutil.WriteClientMessage(wsConn, ws.OpPing, nil)
 			}
 			timer.Reset(connection.keepAlivePeriod)
 			connection.writeMu.Unlock()
@@ -330,8 +344,16 @@ func (connection *WsConnection) keepAlive() {
 }
 
 func (connection *WsConnection) close() {
+	connection.closeConn(nil)
+}
+
+func (connection *WsConnection) closeConn(expected net.Conn) {
 	connection.connMu.Lock()
 	if !connection.connected {
+		connection.connMu.Unlock()
+		return
+	}
+	if expected != nil && connection.ws != expected {
 		connection.connMu.Unlock()
 		return
 	}
@@ -360,6 +382,11 @@ func (connection *WsConnection) Send(payload []byte) ([]byte, error) {
 	connection.writeMu.Unlock()
 
 	if err == nil {
+		connection.connMu.Lock()
+		defer connection.connMu.Unlock()
+		if !connection.connected || connection.activity == nil {
+			return nil, nil
+		}
 		select {
 		case connection.activity <- struct{}{}:
 		default:

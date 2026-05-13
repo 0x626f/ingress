@@ -73,11 +73,10 @@ func (spec APISpec) BuildQuery(id uint, method string, params []any) ([]byte, er
 }
 
 // ParseResponse deserialises a JSON-RPC 2.0 response frame and returns the
-// inner value of the "result" field with its outer JSON delimiter stripped
-// (e.g. a hex string "0x1a" is returned as 0x1a without quotes; an object
-// has its enclosing braces removed). Returns nil without an error when the
-// result field is absent or null. Returns an APIError when the response
-// contains an error object.
+// inner value of the "result" field. JSON strings are returned without their
+// quotes; objects, arrays, booleans, and numbers are returned as valid JSON.
+// Returns nil without an error when the result field is absent or null.
+// Returns an APIError when the response contains an error object.
 func (spec APISpec) ParseResponse(response []byte) ([]byte, error) {
 	if len(response) == 0 {
 		return nil, nil
@@ -106,15 +105,19 @@ func (spec APISpec) ParseResponse(response []byte) ([]byte, error) {
 		return nil, summary.Params.Error
 	}
 
-	if summary.Result == nil {
+	if summary.Result == nil || string(summary.Result) == "null" {
 		return nil, nil
 	}
 
-	if summary.Result[0] == '{' {
-		return summary.Result, nil
+	if summary.Result[0] == '"' {
+		var value string
+		if err := json.Unmarshal(summary.Result, &value); err != nil {
+			return nil, err
+		}
+		return []byte(value), nil
 	}
 
-	return summary.Result[1 : len(summary.Result)-1], nil
+	return summary.Result, nil
 }
 
 // ParseSubscriptionResponse extracts the result payload from an eth_subscribe

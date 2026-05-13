@@ -1,9 +1,8 @@
 // Package model provides typed response structures for all EVM JSON-RPC calls
 // and helpers to decode the raw bytes returned by [rpc.CoreClient] methods.
 //
-// CoreClient strips the outer JSON delimiter from every result
-// (quotes from strings, braces from objects, brackets from arrays), so each
-// Decode function re-adds the appropriate delimiter before unmarshaling.
+// CoreClient strips quotes from JSON string results and preserves objects and
+// arrays as valid JSON, so structured Decode functions can unmarshal directly.
 package model
 
 import "encoding/json"

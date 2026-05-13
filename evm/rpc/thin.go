@@ -26,6 +26,10 @@ type ThinClient struct {
 }
 
 func newThinClient(kind evm.ConnectionKind, manager *evm.ConnectionManager, sequencer *evm.SequenceGenerator, subStreamSize int) *ThinClient {
+	if subStreamSize == 0 {
+		subStreamSize = 64
+	}
+
 	client := &ThinClient{
 		kind:      kind,
 		manager:   manager,
@@ -153,6 +157,33 @@ func (client *ThinClient) rejectSubscription(stream evm.RStream, id string) {
 	}
 }
 
+func (client *ThinClient) removeSubscription(id string) {
+	client.mu.Lock()
+	defer client.mu.Unlock()
+
+	for stream, subscriptions := range client.subscriptions {
+		if _, ok := subscriptions[id]; ok {
+			delete(subscriptions, id)
+			if len(subscriptions) == 0 {
+				delete(client.subscriptions, stream)
+			}
+			break
+		}
+	}
+
+	if active, ok := client.listeners[id]; ok {
+		close(active)
+		delete(client.listeners, id)
+	}
+}
+
+func sendSubscriptionMessage(stream evm.RWStream, data evm.Message) {
+	defer func() {
+		_ = recover()
+	}()
+	stream <- data
+}
+
 func (client *ThinClient) respond(source evm.RStream, message evm.Message) {
 	messageId, err := APISpec{}.ParseMessageId(message)
 	if err != nil {
@@ -160,7 +191,6 @@ func (client *ThinClient) respond(source evm.RStream, message evm.Message) {
 	}
 
 	client.mu.Lock()
-	defer client.mu.Unlock()
 
 	if messageId.Id != 0 {
 		delete(client.streams[source], messageId.Id)
@@ -168,19 +198,31 @@ func (client *ThinClient) respond(source evm.RStream, message evm.Message) {
 			stream <- message
 			delete(client.pending, messageId.Id)
 		}
+		client.mu.Unlock()
 	} else if messageId.Subscription != "" {
-		if stream, ok := client.listeners[messageId.Subscription]; ok {
-			data, err := APISpec{}.ParseSubscriptionResponse(message)
-			if err == nil {
-				stream <- data
-			} else {
-				client.rejectSubscription(source, messageId.Subscription)
-			}
+		stream, ok := client.listeners[messageId.Subscription]
+		client.mu.Unlock()
+		if !ok {
+			return
 		}
+
+		data, err := APISpec{}.ParseSubscriptionResponse(message)
+		if err != nil {
+			client.rejectSubscription(source, messageId.Subscription)
+			return
+		}
+
+		sendSubscriptionMessage(stream, data)
+		return
+	} else {
+		client.mu.Unlock()
 	}
 }
 
 func (client *ThinClient) handle(call func(*QueryParams) ([]byte, error), params *QueryParams) (result []byte, stream evm.RStream, err error) {
+	if client.manager == nil {
+		return nil, nil, fmt.Errorf("no %s connection manager configured", client.kind)
+	}
 
 	client.preProcess(params)
 
@@ -459,11 +501,15 @@ func (client *ThinClient) UnSubscribe(query UnSubscribeQuery) ([]byte, error) {
 		return nil, fmt.Errorf("%s client doesn't support subscribe method", client.kind)
 	}
 
-	return omitStream(client.handle(
+	result, err := omitStream(client.handle(
 		APISpec{}.Unsubscribe,
 		QueryWithId(
 			query.Id,
 			query.Subscription,
 		),
 	))
+	if err == nil {
+		client.removeSubscription(query.Subscription)
+	}
+	return result, err
 }

@@ -98,6 +98,10 @@ func NewRawClient(config *ClientConfig) (*RawClient, error) {
 		manager.AddConnection(conn)
 	}
 
+	if client.http == nil && client.ws == nil {
+		return nil, fmt.Errorf("no valid resources specified")
+	}
+
 	return client, nil
 }
 

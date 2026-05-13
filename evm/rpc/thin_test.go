@@ -157,6 +157,15 @@ func TestNewClient_InvalidResource_ErrorWhenRequired(t *testing.T) {
 	}
 }
 
+func TestNewClient_InvalidResources_ReturnsErrorWhenNoneUsable(t *testing.T) {
+	_, err := NewRawClient(&ClientConfig{
+		Resources: []string{"ftp://invalid"},
+	})
+	if err == nil {
+		t.Error("expected error when no valid resources remain")
+	}
+}
+
 func TestNewClient_HTTPResource_CreatesHTTPManager(t *testing.T) {
 	c, err := NewRawClient(&ClientConfig{Resources: []string{"https://rpc.example.com"}})
 	if err != nil {
@@ -177,6 +186,17 @@ func TestNewClient_WSResource_CreatesWSManager(t *testing.T) {
 	}
 	if c.ws == nil {
 		t.Error("expected WS manager to be created")
+	}
+}
+
+func TestClient_MissingTransportManager_ReturnsError(t *testing.T) {
+	c, err := NewRawClient(&ClientConfig{Resources: []string{"ws://localhost:8546"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := c.HTTP().ChainId(); err == nil {
+		t.Error("expected error for HTTP client without HTTP resources")
 	}
 }
 
@@ -735,6 +755,31 @@ func TestWSClient_Subscribe_ListenerRegisteredInMap(t *testing.T) {
 
 	if !ok {
 		t.Error("expected subscription listener registered in listeners map")
+	}
+}
+
+func TestWSClient_UnSubscribe_RemovesAndClosesListener(t *testing.T) {
+	conn := &mockWSConnection{kind: evm.WS, events: make(chan evm.Message, 8), result: "0xsub999"}
+	client := withWS(conn)
+
+	sub, listener, err := client.Subscribe(SubscribeQuery{On: SubscriptionNewHeads})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := client.UnSubscribe(UnSubscribeQuery{Subscription: sub}); err != nil {
+		t.Fatal(err)
+	}
+
+	client.mu.Lock()
+	listenerCount := len(client.listeners)
+	client.mu.Unlock()
+	if listenerCount != 0 {
+		t.Errorf("expected listeners to be empty, got %d", listenerCount)
+	}
+
+	if _, ok := <-listener; ok {
+		t.Error("expected listener to be closed")
 	}
 }
 
