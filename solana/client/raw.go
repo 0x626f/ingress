@@ -1,13 +1,13 @@
-package rpc
+package client
 
 import (
+	"context"
 	"fmt"
 	"time"
 
 	"github.com/0x626f/ingress/evm"
 )
 
-// ClientConfig holds the configuration used to construct a RawClient.
 type ClientConfig struct {
 	// Resources is the list of endpoint URLs (http/https/ws/wss).
 	// At least one must be provided.
@@ -22,13 +22,14 @@ type ClientConfig struct {
 	// KeepAlivePeriod is the idle interval after which a keep-alive probe is sent
 	// on WebSocket connections. Defaults to 15 s when zero.
 	KeepAlivePeriod time.Duration
-	// SubscriptionStreamSize is the buffer depth of the channel returned by Subscribe.
+	// SubscriptionStreamSize is the buffer depth of subscription event channels.
 	SubscriptionStreamSize int
 }
 
-// RawClient manages HTTP and WebSocket connection pools for an EVM JSON-RPC node.
+// RawClient manages HTTP and WebSocket connection pools for a Solana JSON-RPC node.
 // Use HTTP() and WS() to obtain a ThinClient for the desired transport.
 type RawClient struct {
+	ctx    context.Context
 	config *ClientConfig
 
 	http *evm.ConnectionManager
@@ -37,65 +38,69 @@ type RawClient struct {
 	sequencer *evm.SequenceGenerator
 }
 
-// NewRawClient constructs a RawClient from the provided config, dialling and
+// NewRawClient constructs a RawClient from the provided config, dialing and
 // registering each resource URL in the appropriate connection pool (HTTP or WS).
 // Returns an error if no resources are provided, or if a resource is invalid
 // and ErrorOnInvalidResource is set.
 func NewRawClient(config *ClientConfig) (*RawClient, error) {
+	return NewRawClientWithContext(context.Background(), config)
+}
+
+// NewRawClientWithContext constructs a RawClient with an explicit context for
+// subscription lifetimes.
+func NewRawClientWithContext(ctx context.Context, config *ClientConfig) (*RawClient, error) {
+	if config == nil {
+		return nil, fmt.Errorf("nil config")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if len(config.Resources) == 0 {
+		return nil, fmt.Errorf("no resources specified")
+	}
+
 	client := &RawClient{
+		ctx:       ctx,
 		config:    config,
 		sequencer: new(evm.SequenceGenerator),
 	}
 
-	if len(client.config.Resources) == 0 {
-		return nil, fmt.Errorf("no resources specified")
-	}
-
-	// use application level ping to maintain connection in case of keep-alive is required
 	genKeepAliveMessage := func() []byte {
-		keepAliveMessage, _ := APISpec{}.BlockNumber(QueryWithId(client.sequencer.Next()))
-		return keepAliveMessage
+		payload, _ := buildRequestWithID(client.sequencer.Next(), RPCMethodGetHealth, nil)
+		return payload
 	}
 
-	for _, resource := range client.config.Resources {
-
-		connectionParams := evm.ConnectionParams{
+	for _, resource := range config.Resources {
+		conn, err := evm.NewRPCConnection(evm.ConnectionParams{
 			Resource:         resource,
 			Timeout:          config.RequestTimeout,
 			KeepAlivePeriod:  config.KeepAlivePeriod,
 			KeepAliveMessage: genKeepAliveMessage,
 			StreamSize:       config.SubscriptionStreamSize,
-		}
-
-		conn, err := evm.NewRPCConnection(connectionParams)
+		})
 		if err != nil {
-			if client.config.ErrorOnInvalidResource {
+			if config.ErrorOnInvalidResource {
 				return nil, err
 			}
 			continue
 		}
-
-		var manager *evm.ConnectionManager
 
 		switch conn.Kind() {
 		case evm.HTTP:
 			if client.http == nil {
 				client.http = &evm.ConnectionManager{}
 			}
-			manager = client.http
+			client.http.AddConnection(conn)
 		case evm.WS:
 			if client.ws == nil {
 				client.ws = &evm.ConnectionManager{}
 			}
-			manager = client.ws
+			client.ws.AddConnection(conn)
 		default:
-			if client.config.ErrorOnInvalidResource {
+			if config.ErrorOnInvalidResource {
 				return nil, fmt.Errorf("client does not support %s resources", conn.Kind())
 			}
-			continue
 		}
-
-		manager.AddConnection(conn)
 	}
 
 	if client.http == nil && client.ws == nil {
@@ -105,12 +110,27 @@ func NewRawClient(config *ClientConfig) (*RawClient, error) {
 	return client, nil
 }
 
-// HTTP returns a ThinClient backed by the HTTP connection pool.
 func (client *RawClient) HTTP() *ThinClient {
-	return newThinClient(evm.HTTP, client.http, client.sequencer, 0)
+	return newThinClientWithContext(client.ctx, evm.HTTP, client.http, client.sequencer, 0)
 }
 
-// WS returns a ThinClient backed by the WebSocket connection pool.
 func (client *RawClient) WS() *ThinClient {
-	return newThinClient(evm.WS, client.ws, client.sequencer, client.config.SubscriptionStreamSize)
+	return newThinClientWithContext(client.ctx, evm.WS, client.ws, client.sequencer, client.config.SubscriptionStreamSize)
+}
+
+func newThinClient(kind evm.ConnectionKind, manager *evm.ConnectionManager, sequencer *evm.SequenceGenerator, subscriptionBufSize int) *ThinClient {
+	return newThinClientWithContext(context.Background(), kind, manager, sequencer, subscriptionBufSize)
+}
+
+func newThinClientWithContext(ctx context.Context, kind evm.ConnectionKind, manager *evm.ConnectionManager, sequencer *evm.SequenceGenerator, subscriptionBufSize int) *ThinClient {
+	if subscriptionBufSize == 0 {
+		subscriptionBufSize = 64
+	}
+	return &ThinClient{
+		ctx:                 ctx,
+		kind:                kind,
+		manager:             manager,
+		sequencer:           sequencer,
+		subscriptionBufSize: subscriptionBufSize,
+	}
 }

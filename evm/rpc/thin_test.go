@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/0x626f/intercon/evm"
+	"github.com/0x626f/ingress/evm"
 )
 
 // ============================================================================

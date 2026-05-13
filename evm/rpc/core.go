@@ -1,6 +1,6 @@
 package rpc
 
-import "github.com/0x626f/intercon/evm"
+import "github.com/0x626f/ingress/evm"
 
 // CoreClient is the top-level interface for interacting with an EVM-compatible
 // JSON-RPC node. All methods return raw result bytes with the outer JSON

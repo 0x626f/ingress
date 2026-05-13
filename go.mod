@@ -1,4 +1,4 @@
-module github.com/0x626f/intercon
+module github.com/0x626f/ingress
 
 go 1.24.2
 

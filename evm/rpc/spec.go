@@ -1,9 +1,6 @@
 package rpc
 
-import (
-	"encoding/json"
-	"fmt"
-)
+import "github.com/0x626f/ingress/jsonrpc"
 
 const (
 	chainId               = "eth_chainId"
@@ -46,30 +43,11 @@ type APISpec struct {
 }
 
 // APIError represents a JSON-RPC error object returned by the node.
-type APIError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-	Data    any    `json:"data"`
-}
-
-// Error implements the error interface.
-func (err *APIError) Error() string {
-	return fmt.Sprintf("RPC Error[%d]: Message: %s. Data: %v", err.Code, err.Message, err.Data)
-}
+type APIError = jsonrpc.Error
 
 // BuildQuery serialises a JSON-RPC 2.0 request frame.
 func (spec APISpec) BuildQuery(id uint, method string, params []any) ([]byte, error) {
-	paramsJSON, err := json.Marshal(params)
-	if err != nil {
-		return nil, err
-	}
-
-	return []byte(fmt.Sprintf(
-		`{"jsonrpc":"2.0","id":%d,"method":%q,"params":%s}`,
-		id,
-		method,
-		paramsJSON,
-	)), nil
+	return jsonrpc.BuildRequest(id, method, params)
 }
 
 // ParseResponse deserialises a JSON-RPC 2.0 response frame and returns the
@@ -78,90 +56,24 @@ func (spec APISpec) BuildQuery(id uint, method string, params []any) ([]byte, er
 // Returns nil without an error when the result field is absent or null.
 // Returns an APIError when the response contains an error object.
 func (spec APISpec) ParseResponse(response []byte) ([]byte, error) {
-	if len(response) == 0 {
-		return nil, nil
-	}
-
-	var summary struct {
-		Jsonrpc string          `json:"jsonrpc"`
-		ID      uint            `json:"id"`
-		Result  json.RawMessage `json:"result"`
-		Error   *APIError       `json:"error"`
-		Params  struct {
-			Error *APIError `json:"error"`
-		} `json:"params"`
-	}
-	err := json.Unmarshal(response, &summary)
-
-	if err != nil {
-		return nil, err
-	}
-
-	if summary.Error != nil {
-		return nil, summary.Error
-	}
-
-	if summary.Params.Error != nil {
-		return nil, summary.Params.Error
-	}
-
-	if summary.Result == nil || string(summary.Result) == "null" {
-		return nil, nil
-	}
-
-	if summary.Result[0] == '"' {
-		var value string
-		if err := json.Unmarshal(summary.Result, &value); err != nil {
-			return nil, err
-		}
-		return []byte(value), nil
-	}
-
-	return summary.Result, nil
+	return jsonrpc.ParseResponse(response)
 }
 
 // ParseSubscriptionResponse extracts the result payload from an eth_subscribe
 // push notification (params.result field).
 func (spec APISpec) ParseSubscriptionResponse(request []byte) ([]byte, error) {
-	var summary struct {
-		Params struct {
-			Result json.RawMessage `json:"result,omitempty"`
-		} `json:"params,omitempty"`
-	}
-
-	err := json.Unmarshal(request, &summary)
-	if err != nil {
-		return nil, err
-	}
-
-	return summary.Params.Result, nil
+	return jsonrpc.ParseSubscriptionResult(request)
 }
 
 // MessageId identifies a JSON-RPC message as either a regular response (Id > 0)
 // or a subscription push notification (Subscription non-empty).
-type MessageId struct {
-	Id           uint
-	Subscription string
-}
+type MessageId = jsonrpc.MessageID
 
 // ParseMessageId extracts the routing identity from an inbound WebSocket message.
 // For ordinary responses it populates Id; for subscription notifications it
 // populates Subscription.
 func (spec APISpec) ParseMessageId(response []byte) (MessageId, error) {
-	var summary struct {
-		Id     uint `json:"id,omitempty"`
-		Params struct {
-			Subscription string `json:"subscription,omitempty"`
-		} `json:"params,omitempty"`
-	}
-
-	err := json.Unmarshal(response, &summary)
-
-	if err != nil {
-		return MessageId{}, err
-	}
-
-	return MessageId{Id: summary.Id, Subscription: summary.Params.Subscription}, nil
+	return jsonrpc.ParseMessageID(response)
 }
 
 // SupportedMethod returns the list of Ethereum JSON-RPC method names that

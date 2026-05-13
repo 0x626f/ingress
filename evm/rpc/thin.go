@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/0x626f/intercon/evm"
+	"github.com/0x626f/ingress/evm"
 )
 
 // ThinClient implements CoreClient for a single transport kind (HTTP or WS).
@@ -192,11 +192,11 @@ func (client *ThinClient) respond(source evm.RStream, message evm.Message) {
 
 	client.mu.Lock()
 
-	if messageId.Id != 0 {
-		delete(client.streams[source], messageId.Id)
-		if stream, ok := client.pending[messageId.Id]; ok {
+	if messageId.ID != 0 {
+		delete(client.streams[source], messageId.ID)
+		if stream, ok := client.pending[messageId.ID]; ok {
 			stream <- message
-			delete(client.pending, messageId.Id)
+			delete(client.pending, messageId.ID)
 		}
 		client.mu.Unlock()
 	} else if messageId.Subscription != "" {
