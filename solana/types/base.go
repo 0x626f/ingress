@@ -1,5 +1,5 @@
 // Package types provides common type definitions and data structures
-// used throughout the Solana RPC client library.
+// used throughout the Solana RPC rpc library.
 package types
 
 // Commitment represents the commitment level for Solana RPC requests.

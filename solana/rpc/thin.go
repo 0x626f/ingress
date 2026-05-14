@@ -1,6 +1,6 @@
-// Package client provides a lightweight Solana RPC client implementation
+// Package rpc provides a lightweight Solana RPC rpc implementation
 // for interacting with Solana blockchain nodes via JSON-RPC protocol.
-package client
+package rpc
 
 import (
 	"context"
@@ -8,9 +8,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/0x626f/ingress/evm"
 	"github.com/0x626f/ingress/jsonrpc"
 	"github.com/0x626f/ingress/solana/types"
+	"github.com/0x626f/ingress/transport"
 )
 
 // ThinClient implements CoreClient for a single transport kind (HTTP or WS).
@@ -18,13 +18,13 @@ import (
 type ThinClient struct {
 	ctx context.Context
 
-	kind                evm.ConnectionKind
-	manager             *evm.ConnectionManager
-	sequencer           *evm.SequenceGenerator
+	kind                transport.ConnectionKind
+	manager             *transport.ConnectionManager
+	sequencer           *transport.SequenceGenerator
 	subscriptionBufSize int
 }
 
-// Client is kept as a compatibility alias for the previous Solana client API.
+// Client is kept as a compatibility alias for the previous Solana rpc API.
 type Client = ThinClient
 
 // Event represents a streaming event from a WebSocket subscription.
@@ -67,7 +67,7 @@ func (client *ThinClient) call(method string, params any) (*Response, error) {
 	return client.callWithManager(manager, method, params)
 }
 
-func (client *ThinClient) callWithManager(manager *evm.ConnectionManager, method string, params any) (*Response, error) {
+func (client *ThinClient) callWithManager(manager *transport.ConnectionManager, method string, params any) (*Response, error) {
 	if manager == nil {
 		return nil, fmt.Errorf("no %s connection manager configured", client.kind)
 	}

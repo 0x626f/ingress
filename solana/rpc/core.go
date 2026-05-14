@@ -1,4 +1,4 @@
-package client
+package rpc
 
 import "github.com/0x626f/ingress/solana/types"
 

@@ -1,12 +1,13 @@
-package client
+package rpc
 
 import (
-	"github.com/0x626f/ingress/solana/types"
 	"time"
+
+	"github.com/0x626f/ingress/solana/types"
 )
 
 const (
-	// SupportedJsonRpcVersion is the JSON-RPC protocol version supported by this client
+	// SupportedJsonRpcVersion is the JSON-RPC protocol version supported by this rpc
 	SupportedJsonRpcVersion = "2.0"
 
 	// DefaultSlotWindow is the default time window for slot updates on Solana

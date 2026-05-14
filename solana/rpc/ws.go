@@ -1,4 +1,4 @@
-package client
+package rpc
 
 import (
 	"encoding/json"
@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/0x626f/ingress/evm"
 	"github.com/0x626f/ingress/jsonrpc"
 	"github.com/0x626f/ingress/solana/types"
+	"github.com/0x626f/ingress/transport"
 )
 
 type Subscription struct {
@@ -16,8 +16,8 @@ type Subscription struct {
 	Events chan *Event[types.RawResult]
 
 	client            *ThinClient
-	manager           *evm.ConnectionManager
-	stream            evm.RStream
+	manager           *transport.ConnectionManager
+	stream            transport.RStream
 	unsubscribeMethod string
 	closeOnce         sync.Once
 	done              chan struct{}

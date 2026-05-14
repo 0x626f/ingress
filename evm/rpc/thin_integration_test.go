@@ -188,7 +188,7 @@ func wsChainClient(t *testing.T, chain *chainConfig) *ThinClient {
 // Test iteration helpers
 // ============================================================================
 
-// forEachHTTPChain runs fn as a named subtest for each enabled chain's HTTP client.
+// forEachHTTPChain runs fn as a named subtest for each enabled chain's HTTP rpc.
 func forEachHTTPChain(t *testing.T, fn func(t *testing.T, c *ThinClient, chain *chainConfig)) {
 	t.Helper()
 	for _, chain := range enabledChains() {

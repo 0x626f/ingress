@@ -5,27 +5,27 @@ import (
 	"sync"
 	"time"
 
-	"github.com/0x626f/ingress/evm"
+	"github.com/0x626f/ingress/transport"
 )
 
 // ThinClient implements CoreClient for a single transport kind (HTTP or WS).
 // For WebSocket it maintains per-request pending channels and routes incoming
 // messages to the correct caller. Obtain a ThinClient via RawClient.HTTP or Client.WS.
 type ThinClient struct {
-	kind      evm.ConnectionKind
-	manager   *evm.ConnectionManager
-	sequencer *evm.SequenceGenerator
+	kind      transport.ConnectionKind
+	manager   *transport.ConnectionManager
+	sequencer *transport.SequenceGenerator
 
 	mu      sync.Mutex
-	streams map[evm.RStream]map[uint]struct{} // manager stream to request id map
-	pending map[uint]evm.RWStream             // request id to response channel
+	streams map[transport.RStream]map[uint]struct{} // manager stream to request id map
+	pending map[uint]transport.RWStream             // request id to response channel
 
 	subscriptionStreamSize int
-	subscriptions          map[evm.RStream]map[string]struct{} // stream to subscriptions
-	listeners              map[string]evm.RWStream             // subscription to listener
+	subscriptions          map[transport.RStream]map[string]struct{} // stream to subscriptions
+	listeners              map[string]transport.RWStream             // subscription to listener
 }
 
-func newThinClient(kind evm.ConnectionKind, manager *evm.ConnectionManager, sequencer *evm.SequenceGenerator, subStreamSize int) *ThinClient {
+func newThinClient(kind transport.ConnectionKind, manager *transport.ConnectionManager, sequencer *transport.SequenceGenerator, subStreamSize int) *ThinClient {
 	if subStreamSize == 0 {
 		subStreamSize = 64
 	}
@@ -36,12 +36,12 @@ func newThinClient(kind evm.ConnectionKind, manager *evm.ConnectionManager, sequ
 		sequencer: sequencer,
 	}
 
-	if kind == evm.WS {
-		client.pending = make(map[uint]evm.RWStream)
-		client.streams = make(map[evm.RStream]map[uint]struct{})
+	if kind == transport.WS {
+		client.pending = make(map[uint]transport.RWStream)
+		client.streams = make(map[transport.RStream]map[uint]struct{})
 		client.subscriptionStreamSize = subStreamSize
-		client.subscriptions = make(map[evm.RStream]map[string]struct{})
-		client.listeners = make(map[string]evm.RWStream)
+		client.subscriptions = make(map[transport.RStream]map[string]struct{})
+		client.listeners = make(map[string]transport.RWStream)
 	}
 
 	return client
@@ -50,17 +50,17 @@ func newThinClient(kind evm.ConnectionKind, manager *evm.ConnectionManager, sequ
 func (client *ThinClient) preProcess(params *QueryParams) {
 	params.Id = client.sequencer.Next()
 
-	if client.kind == evm.HTTP {
+	if client.kind == transport.HTTP {
 		return
 	}
 
 	client.mu.Lock()
-	client.pending[params.Id] = make(chan evm.Message, 2) // set size 2 to avoid sync on proxy side
+	client.pending[params.Id] = make(chan transport.Message, 2) // set size 2 to avoid sync on proxy side
 	client.mu.Unlock()
 }
 
-func (client *ThinClient) postProcess(stream evm.RStream, timeout time.Duration, params *QueryParams, result []byte, failed bool) []byte {
-	if client.kind == evm.HTTP {
+func (client *ThinClient) postProcess(stream transport.RStream, timeout time.Duration, params *QueryParams, result []byte, failed bool) []byte {
+	if client.kind == transport.HTTP {
 		return result
 	}
 
@@ -99,7 +99,7 @@ func (client *ThinClient) postProcess(stream evm.RStream, timeout time.Duration,
 	}
 }
 
-func (client *ThinClient) listen(stream evm.RStream) {
+func (client *ThinClient) listen(stream transport.RStream) {
 	for {
 		select {
 		case message, ok := <-stream:
@@ -112,7 +112,7 @@ func (client *ThinClient) listen(stream evm.RStream) {
 	}
 }
 
-func (client *ThinClient) clearStream(stream evm.RStream) {
+func (client *ThinClient) clearStream(stream transport.RStream) {
 	client.mu.Lock()
 	defer client.mu.Unlock()
 
@@ -129,7 +129,7 @@ func (client *ThinClient) clearStream(stream evm.RStream) {
 	clear(subscriptions)
 }
 
-func (client *ThinClient) rejectListener(stream evm.RStream, id uint) {
+func (client *ThinClient) rejectListener(stream transport.RStream, id uint) {
 	client.mu.Lock()
 	defer client.mu.Unlock()
 
@@ -143,7 +143,7 @@ func (client *ThinClient) rejectListener(stream evm.RStream, id uint) {
 	}
 }
 
-func (client *ThinClient) rejectSubscription(stream evm.RStream, id string) {
+func (client *ThinClient) rejectSubscription(stream transport.RStream, id string) {
 	client.mu.Lock()
 	defer client.mu.Unlock()
 
@@ -177,14 +177,14 @@ func (client *ThinClient) removeSubscription(id string) {
 	}
 }
 
-func sendSubscriptionMessage(stream evm.RWStream, data evm.Message) {
+func sendSubscriptionMessage(stream transport.RWStream, data transport.Message) {
 	defer func() {
 		_ = recover()
 	}()
 	stream <- data
 }
 
-func (client *ThinClient) respond(source evm.RStream, message evm.Message) {
+func (client *ThinClient) respond(source transport.RStream, message transport.Message) {
 	messageId, err := APISpec{}.ParseMessageId(message)
 	if err != nil {
 		return
@@ -219,7 +219,7 @@ func (client *ThinClient) respond(source evm.RStream, message evm.Message) {
 	}
 }
 
-func (client *ThinClient) handle(call func(*QueryParams) ([]byte, error), params *QueryParams) (result []byte, stream evm.RStream, err error) {
+func (client *ThinClient) handle(call func(*QueryParams) ([]byte, error), params *QueryParams) (result []byte, stream transport.RStream, err error) {
 	if client.manager == nil {
 		return nil, nil, fmt.Errorf("no %s connection manager configured", client.kind)
 	}
@@ -247,7 +247,7 @@ func (client *ThinClient) handle(call func(*QueryParams) ([]byte, error), params
 	return result, stream, err
 }
 
-func omitStream(result []byte, stream evm.RStream, err error) ([]byte, error) {
+func omitStream(result []byte, stream transport.RStream, err error) ([]byte, error) {
 	_ = stream
 	return result, err
 }
@@ -437,9 +437,9 @@ func (client *ThinClient) GetLogs(query LogsQuery) ([]byte, error) {
 // Subscribe calls eth_subscribe and registers a local listener channel.
 // It is only supported on WebSocket clients. Returns the subscription ID and
 // a channel on which push events are delivered until UnSubscribe is called.
-func (client *ThinClient) Subscribe(query SubscribeQuery) (evm.Subscription, evm.RStream, error) {
-	if client.kind != evm.WS {
-		return "", nil, fmt.Errorf("%s client doesn't support subscribe method", client.kind)
+func (client *ThinClient) Subscribe(query SubscribeQuery) (transport.Subscription, transport.RStream, error) {
+	if client.kind != transport.WS {
+		return "", nil, fmt.Errorf("%s rpc doesn't support subscribe method", client.kind)
 	}
 
 	var meta map[string]any
@@ -455,7 +455,7 @@ func (client *ThinClient) Subscribe(query SubscribeQuery) (evm.Subscription, evm
 	}
 
 	var subscription []byte
-	var stream evm.RStream
+	var stream transport.RStream
 	var err error
 
 	if len(meta) > 0 {
@@ -481,7 +481,7 @@ func (client *ThinClient) Subscribe(query SubscribeQuery) (evm.Subscription, evm
 		return "", nil, err
 	}
 
-	listener := make(evm.RWStream, client.subscriptionStreamSize)
+	listener := make(transport.RWStream, client.subscriptionStreamSize)
 
 	client.mu.Lock()
 	if _, ok := client.subscriptions[stream]; !ok {
@@ -497,8 +497,8 @@ func (client *ThinClient) Subscribe(query SubscribeQuery) (evm.Subscription, evm
 // UnSubscribe calls eth_unsubscribe and tears down the local listener.
 // It is only supported on WebSocket clients.
 func (client *ThinClient) UnSubscribe(query UnSubscribeQuery) ([]byte, error) {
-	if client.kind != evm.WS {
-		return nil, fmt.Errorf("%s client doesn't support subscribe method", client.kind)
+	if client.kind != transport.WS {
+		return nil, fmt.Errorf("%s rpc doesn't support subscribe method", client.kind)
 	}
 
 	result, err := omitStream(client.handle(

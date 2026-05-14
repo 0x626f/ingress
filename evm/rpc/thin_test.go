@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/0x626f/ingress/evm"
+	"github.com/0x626f/ingress/transport"
 )
 
 // ============================================================================
@@ -15,17 +15,17 @@ import (
 // ============================================================================
 
 type mockConnection struct {
-	kind        evm.ConnectionKind
+	kind        transport.ConnectionKind
 	response    []byte
 	err         error
 	lastPayload []byte
 	callCount   int
 }
 
-func (m *mockConnection) Kind() evm.ConnectionKind   { return m.kind }
-func (m *mockConnection) Resource() string           { return "" }
-func (m *mockConnection) Timeout() time.Duration     { return 0 }
-func (m *mockConnection) Stream() <-chan evm.Message { return nil }
+func (m *mockConnection) Kind() transport.ConnectionKind   { return m.kind }
+func (m *mockConnection) Resource() string                 { return "" }
+func (m *mockConnection) Timeout() time.Duration           { return 0 }
+func (m *mockConnection) Stream() <-chan transport.Message { return nil }
 func (m *mockConnection) Send(data []byte) ([]byte, error) {
 	m.callCount++
 	m.lastPayload = data
@@ -60,18 +60,18 @@ func parseReq(t *testing.T, payload []byte) rpcRequest {
 
 // withHTTP returns a ThinClient backed by a single mock HTTP connection.
 func withHTTP(mock *mockConnection) *ThinClient {
-	mgr := &evm.ConnectionManager{}
+	mgr := &transport.ConnectionManager{}
 	mgr.AddConnection(mock)
-	return newThinClient(evm.HTTP, mgr, new(evm.SequenceGenerator), 0)
+	return newThinClient(transport.HTTP, mgr, new(transport.SequenceGenerator), 0)
 }
 
 // okHTTP returns a mock HTTP connection with a successful JSON-RPC response.
 func okHTTP() *mockConnection {
-	return &mockConnection{kind: evm.HTTP, response: rpcResp(1, "0x1")}
+	return &mockConnection{kind: transport.HTTP, response: rpcResp(1, "0x1")}
 }
 
 // failConn returns a mock connection that always fails with a transport error.
-func failConn(k evm.ConnectionKind) *mockConnection {
+func failConn(k transport.ConnectionKind) *mockConnection {
 	return &mockConnection{kind: k, err: errors.New("fail")}
 }
 
@@ -80,8 +80,8 @@ func failConn(k evm.ConnectionKind) *mockConnection {
 // ============================================================================
 
 type mockWSConnection struct {
-	kind        evm.ConnectionKind
-	events      chan evm.Message
+	kind        transport.ConnectionKind
+	events      chan transport.Message
 	lastPayload []byte
 	callCount   int
 	err         error
@@ -90,10 +90,10 @@ type mockWSConnection struct {
 	noRespond   bool
 }
 
-func (m *mockWSConnection) Kind() evm.ConnectionKind   { return m.kind }
-func (m *mockWSConnection) Resource() string           { return "" }
-func (m *mockWSConnection) Timeout() time.Duration     { return m.timeout }
-func (m *mockWSConnection) Stream() <-chan evm.Message { return m.events }
+func (m *mockWSConnection) Kind() transport.ConnectionKind   { return m.kind }
+func (m *mockWSConnection) Resource() string                 { return "" }
+func (m *mockWSConnection) Timeout() time.Duration           { return m.timeout }
+func (m *mockWSConnection) Stream() <-chan transport.Message { return m.events }
 func (m *mockWSConnection) Send(data []byte) ([]byte, error) {
 	m.callCount++
 	m.lastPayload = data
@@ -114,16 +114,16 @@ func (m *mockWSConnection) Send(data []byte) ([]byte, error) {
 
 // withWS returns a ThinClient backed by a single mock WS connection.
 func withWS(mock *mockWSConnection) *ThinClient {
-	mgr := &evm.ConnectionManager{}
+	mgr := &transport.ConnectionManager{}
 	mgr.AddConnection(mock)
-	return newThinClient(evm.WS, mgr, new(evm.SequenceGenerator), 10)
+	return newThinClient(transport.WS, mgr, new(transport.SequenceGenerator), 10)
 }
 
 // okWS returns a mock WS connection that echoes a successful response.
 func okWS() *mockWSConnection {
 	return &mockWSConnection{
-		kind:   evm.WS,
-		events: make(chan evm.Message, 8),
+		kind:   transport.WS,
+		events: make(chan transport.Message, 8),
 		result: "0x1",
 	}
 }
@@ -196,7 +196,7 @@ func TestClient_MissingTransportManager_ReturnsError(t *testing.T) {
 	}
 
 	if _, err := c.HTTP().ChainId(); err == nil {
-		t.Error("expected error for HTTP client without HTTP resources")
+		t.Error("expected error for HTTP rpc without HTTP resources")
 	}
 }
 
@@ -225,7 +225,7 @@ func TestClient_ChainId_Method(t *testing.T) {
 // ============================================================================
 
 func TestClient_BlockNumber_Method(t *testing.T) {
-	conn := &mockConnection{kind: evm.HTTP, response: rpcResp(1, "0x1234")}
+	conn := &mockConnection{kind: transport.HTTP, response: rpcResp(1, "0x1234")}
 	_, err := withHTTP(conn).BlockNumber()
 	if err != nil {
 		t.Fatal(err)
@@ -643,19 +643,19 @@ func TestClient_GetLogs_AddressAndTopics(t *testing.T) {
 func TestClient_HTTP_Subscribe_ReturnsError(t *testing.T) {
 	_, _, err := withHTTP(okHTTP()).Subscribe(SubscribeQuery{})
 	if err == nil {
-		t.Error("expected error: HTTP client does not support Subscribe")
+		t.Error("expected error: HTTP rpc does not support Subscribe")
 	}
 }
 
 func TestClient_HTTP_UnSubscribe_ReturnsError(t *testing.T) {
 	_, err := withHTTP(okHTTP()).UnSubscribe(UnSubscribeQuery{})
 	if err == nil {
-		t.Error("expected error: HTTP client does not support UnSubscribe")
+		t.Error("expected error: HTTP rpc does not support UnSubscribe")
 	}
 }
 
 func TestWSClient_Subscribe_NewHeads_SendsSingleParam(t *testing.T) {
-	conn := &mockWSConnection{kind: evm.WS, events: make(chan evm.Message, 8), result: "0xsub1"}
+	conn := &mockWSConnection{kind: transport.WS, events: make(chan transport.Message, 8), result: "0xsub1"}
 	withWS(conn).Subscribe(SubscribeQuery{On: SubscriptionNewHeads})
 
 	req := parseReq(t, conn.lastPayload)
@@ -675,7 +675,7 @@ func TestWSClient_Subscribe_NewHeads_SendsSingleParam(t *testing.T) {
 }
 
 func TestWSClient_Subscribe_Logs_IncludesFilterParams(t *testing.T) {
-	conn := &mockWSConnection{kind: evm.WS, events: make(chan evm.Message, 8), result: "0xsub2"}
+	conn := &mockWSConnection{kind: transport.WS, events: make(chan transport.Message, 8), result: "0xsub2"}
 	withWS(conn).Subscribe(SubscribeQuery{
 		On:      SubscriptionLogs,
 		Address: "0xContract",
@@ -703,7 +703,7 @@ func TestWSClient_Subscribe_Logs_IncludesFilterParams(t *testing.T) {
 }
 
 func TestWSClient_Subscribe_ReturnsSubscriptionIDAndListener(t *testing.T) {
-	conn := &mockWSConnection{kind: evm.WS, events: make(chan evm.Message, 8), result: "0xsub123"}
+	conn := &mockWSConnection{kind: transport.WS, events: make(chan transport.Message, 8), result: "0xsub123"}
 	subId, listener, err := withWS(conn).Subscribe(SubscribeQuery{On: SubscriptionNewHeads})
 	if err != nil {
 		t.Fatal(err)
@@ -717,7 +717,7 @@ func TestWSClient_Subscribe_ReturnsSubscriptionIDAndListener(t *testing.T) {
 }
 
 func TestWSClient_Subscribe_ListenerReceivesEvents(t *testing.T) {
-	conn := &mockWSConnection{kind: evm.WS, events: make(chan evm.Message, 8), result: "0xsub123"}
+	conn := &mockWSConnection{kind: transport.WS, events: make(chan transport.Message, 8), result: "0xsub123"}
 	_, listener, err := withWS(conn).Subscribe(SubscribeQuery{On: SubscriptionNewHeads})
 	if err != nil {
 		t.Fatal(err)
@@ -742,7 +742,7 @@ func TestWSClient_Subscribe_ListenerReceivesEvents(t *testing.T) {
 }
 
 func TestWSClient_Subscribe_ListenerRegisteredInMap(t *testing.T) {
-	conn := &mockWSConnection{kind: evm.WS, events: make(chan evm.Message, 8), result: "0xsub999"}
+	conn := &mockWSConnection{kind: transport.WS, events: make(chan transport.Message, 8), result: "0xsub999"}
 	client := withWS(conn)
 
 	if _, _, err := client.Subscribe(SubscribeQuery{On: SubscriptionNewHeads}); err != nil {
@@ -759,7 +759,7 @@ func TestWSClient_Subscribe_ListenerRegisteredInMap(t *testing.T) {
 }
 
 func TestWSClient_UnSubscribe_RemovesAndClosesListener(t *testing.T) {
-	conn := &mockWSConnection{kind: evm.WS, events: make(chan evm.Message, 8), result: "0xsub999"}
+	conn := &mockWSConnection{kind: transport.WS, events: make(chan transport.Message, 8), result: "0xsub999"}
 	client := withWS(conn)
 
 	sub, listener, err := client.Subscribe(SubscribeQuery{On: SubscriptionNewHeads})
@@ -788,7 +788,7 @@ func TestWSClient_UnSubscribe_RemovesAndClosesListener(t *testing.T) {
 // ============================================================================
 
 func TestClient_TransportError_ReturnsError(t *testing.T) {
-	conn := failConn(evm.HTTP)
+	conn := failConn(transport.HTTP)
 	if _, err := withHTTP(conn).ChainId(); err == nil {
 		t.Error("expected error when transport fails")
 	}
@@ -913,11 +913,11 @@ func TestWSClient_GetBalance_CorrectParams(t *testing.T) {
 // ============================================================================
 
 func TestWSClient_ResponseRoutedById(t *testing.T) {
-	events := make(chan evm.Message, 8)
+	events := make(chan transport.Message, 8)
 	events <- rpcResp(1, "0xDEAD") // sequencer starts at 1
 
 	conn := &mockWSConnection{
-		kind:      evm.WS,
+		kind:      transport.WS,
 		events:    events,
 		noRespond: true,
 	}
@@ -931,11 +931,11 @@ func TestWSClient_ResponseRoutedById(t *testing.T) {
 }
 
 func TestWSClient_WrongIdInResponse_NotDelivered(t *testing.T) {
-	events := make(chan evm.Message, 8)
+	events := make(chan transport.Message, 8)
 	events <- rpcResp(99, "0xBAD") // ID 99 != sequencer ID 1
 
 	conn := &mockWSConnection{
-		kind:      evm.WS,
+		kind:      transport.WS,
 		events:    events,
 		timeout:   20 * time.Millisecond,
 		noRespond: true,
@@ -949,8 +949,8 @@ func TestWSClient_WrongIdInResponse_NotDelivered(t *testing.T) {
 
 func TestWSClient_SequentialCalls_EachGetsOwnResponse(t *testing.T) {
 	conn := &mockWSConnection{
-		kind:   evm.WS,
-		events: make(chan evm.Message, 8),
+		kind:   transport.WS,
+		events: make(chan transport.Message, 8),
 		result: "0x42",
 	}
 	client := withWS(conn)
@@ -972,8 +972,8 @@ func TestWSClient_SequentialCalls_EachGetsOwnResponse(t *testing.T) {
 
 func TestWSClient_TransportError_ReturnsError(t *testing.T) {
 	conn := &mockWSConnection{
-		kind:   evm.WS,
-		events: make(chan evm.Message, 8),
+		kind:   transport.WS,
+		events: make(chan transport.Message, 8),
 		err:    errors.New("ws send failed"),
 	}
 	if _, err := withWS(conn).ChainId(); err == nil {
@@ -989,11 +989,11 @@ func TestWSClient_MultipleConnections_UsesFirstHealthy(t *testing.T) {
 	first := okWS()
 	second := okWS()
 
-	mgr := &evm.ConnectionManager{}
+	mgr := &transport.ConnectionManager{}
 	mgr.AddConnection(first)
 	mgr.AddConnection(second)
 
-	client := newThinClient(evm.WS, mgr, new(evm.SequenceGenerator), 10)
+	client := newThinClient(transport.WS, mgr, new(transport.SequenceGenerator), 10)
 
 	for i := 0; i < 3; i++ {
 		if _, err := client.ChainId(); err != nil {
@@ -1008,17 +1008,17 @@ func TestWSClient_MultipleConnections_UsesFirstHealthy(t *testing.T) {
 
 func TestWSClient_MultipleConnections_FallsBackToSecond(t *testing.T) {
 	first := &mockWSConnection{
-		kind:   evm.WS,
-		events: make(chan evm.Message, 8),
+		kind:   transport.WS,
+		events: make(chan transport.Message, 8),
 		err:    errors.New("send failed"),
 	}
 	second := okWS()
 
-	mgr := &evm.ConnectionManager{}
+	mgr := &transport.ConnectionManager{}
 	mgr.AddConnection(first)
 	mgr.AddConnection(second)
 
-	client := newThinClient(evm.WS, mgr, new(evm.SequenceGenerator), 10)
+	client := newThinClient(transport.WS, mgr, new(transport.SequenceGenerator), 10)
 
 	result, err := client.ChainId()
 	if err != nil {
@@ -1036,14 +1036,14 @@ func TestWSClient_MultipleConnections_FallsBackToSecond(t *testing.T) {
 }
 
 func TestWSClient_MultipleConnections_AllFail_ReturnsError(t *testing.T) {
-	first := &mockWSConnection{kind: evm.WS, events: make(chan evm.Message, 8), err: errors.New("fail1")}
-	second := &mockWSConnection{kind: evm.WS, events: make(chan evm.Message, 8), err: errors.New("fail2")}
+	first := &mockWSConnection{kind: transport.WS, events: make(chan transport.Message, 8), err: errors.New("fail1")}
+	second := &mockWSConnection{kind: transport.WS, events: make(chan transport.Message, 8), err: errors.New("fail2")}
 
-	mgr := &evm.ConnectionManager{}
+	mgr := &transport.ConnectionManager{}
 	mgr.AddConnection(first)
 	mgr.AddConnection(second)
 
-	if _, err := newThinClient(evm.WS, mgr, new(evm.SequenceGenerator), 10).ChainId(); err == nil {
+	if _, err := newThinClient(transport.WS, mgr, new(transport.SequenceGenerator), 10).ChainId(); err == nil {
 		t.Error("expected error when all connections fail")
 	}
 }
@@ -1065,8 +1065,8 @@ func TestWSClient_MultipleConnections_EachHasOwnStream(t *testing.T) {
 // closes, and that no open pending channels remain afterward.
 func TestWSClient_Resources_PendingChannel_ClosedWhenStreamDrops(t *testing.T) {
 	conn := &mockWSConnection{
-		kind:      evm.WS,
-		events:    make(chan evm.Message, 8),
+		kind:      transport.WS,
+		events:    make(chan transport.Message, 8),
 		noRespond: true,
 	}
 	client := withWS(conn)
@@ -1106,8 +1106,8 @@ func TestWSClient_Resources_PendingChannel_ClosedWhenStreamDrops(t *testing.T) {
 
 func TestWSClient_Resources_StreamsMap_ClearedWhenStreamDrops(t *testing.T) {
 	conn := &mockWSConnection{
-		kind:      evm.WS,
-		events:    make(chan evm.Message, 8),
+		kind:      transport.WS,
+		events:    make(chan transport.Message, 8),
 		noRespond: true,
 	}
 	client := withWS(conn)
@@ -1137,8 +1137,8 @@ func TestWSClient_Resources_StreamsMap_ClearedWhenStreamDrops(t *testing.T) {
 // entirely — no leaked key unlike clearStream.
 func TestWSClient_Resources_RejectListener_ClosesPendingChannel(t *testing.T) {
 	conn := &mockWSConnection{
-		kind:      evm.WS,
-		events:    make(chan evm.Message, 8),
+		kind:      transport.WS,
+		events:    make(chan transport.Message, 8),
 		timeout:   20 * time.Millisecond,
 		noRespond: true,
 	}
@@ -1161,7 +1161,7 @@ func TestWSClient_Resources_RejectListener_ClosesPendingChannel(t *testing.T) {
 // ============================================================================
 
 func TestWSClient_Resources_SubscriptionListener_ClosedWhenStreamDrops(t *testing.T) {
-	conn := &mockWSConnection{kind: evm.WS, events: make(chan evm.Message, 8), result: "0xsub123"}
+	conn := &mockWSConnection{kind: transport.WS, events: make(chan transport.Message, 8), result: "0xsub123"}
 	_, listener, err := withWS(conn).Subscribe(SubscribeQuery{On: SubscriptionNewHeads})
 	if err != nil {
 		t.Fatal(err)
@@ -1180,7 +1180,7 @@ func TestWSClient_Resources_SubscriptionListener_ClosedWhenStreamDrops(t *testin
 }
 
 func TestWSClient_Resources_SubscriptionsMap_ClearedWhenStreamDrops(t *testing.T) {
-	conn := &mockWSConnection{kind: evm.WS, events: make(chan evm.Message, 8), result: "0xsub456"}
+	conn := &mockWSConnection{kind: transport.WS, events: make(chan transport.Message, 8), result: "0xsub456"}
 	client := withWS(conn)
 
 	if _, _, err := client.Subscribe(SubscribeQuery{On: SubscriptionNewHeads}); err != nil {
@@ -1204,7 +1204,7 @@ func TestWSClient_Resources_SubscriptionsMap_ClearedWhenStreamDrops(t *testing.T
 // rejectSubscription closes the listener channel and removes both the
 // listeners and subscriptions map entries.
 func TestWSClient_Resources_RejectSubscription_ClosesListener(t *testing.T) {
-	conn := &mockWSConnection{kind: evm.WS, events: make(chan evm.Message, 8), result: "0xsub789"}
+	conn := &mockWSConnection{kind: transport.WS, events: make(chan transport.Message, 8), result: "0xsub789"}
 	client := withWS(conn)
 
 	subId, listener, err := client.Subscribe(SubscribeQuery{On: SubscriptionNewHeads})

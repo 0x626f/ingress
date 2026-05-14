@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/0x626f/ingress/evm"
+	"github.com/0x626f/ingress/transport"
 )
 
 // ClientConfig holds the configuration used to construct a RawClient.
@@ -31,10 +31,10 @@ type ClientConfig struct {
 type RawClient struct {
 	config *ClientConfig
 
-	http *evm.ConnectionManager
-	ws   *evm.ConnectionManager
+	http *transport.ConnectionManager
+	ws   *transport.ConnectionManager
 
-	sequencer *evm.SequenceGenerator
+	sequencer *transport.SequenceGenerator
 }
 
 // NewRawClient constructs a RawClient from the provided config, dialling and
@@ -44,7 +44,7 @@ type RawClient struct {
 func NewRawClient(config *ClientConfig) (*RawClient, error) {
 	client := &RawClient{
 		config:    config,
-		sequencer: new(evm.SequenceGenerator),
+		sequencer: new(transport.SequenceGenerator),
 	}
 
 	if len(client.config.Resources) == 0 {
@@ -59,7 +59,7 @@ func NewRawClient(config *ClientConfig) (*RawClient, error) {
 
 	for _, resource := range client.config.Resources {
 
-		connectionParams := evm.ConnectionParams{
+		connectionParams := transport.ConnectionParams{
 			Resource:         resource,
 			Timeout:          config.RequestTimeout,
 			KeepAlivePeriod:  config.KeepAlivePeriod,
@@ -67,7 +67,7 @@ func NewRawClient(config *ClientConfig) (*RawClient, error) {
 			StreamSize:       config.SubscriptionStreamSize,
 		}
 
-		conn, err := evm.NewRPCConnection(connectionParams)
+		conn, err := transport.NewRPCConnection(connectionParams)
 		if err != nil {
 			if client.config.ErrorOnInvalidResource {
 				return nil, err
@@ -75,22 +75,22 @@ func NewRawClient(config *ClientConfig) (*RawClient, error) {
 			continue
 		}
 
-		var manager *evm.ConnectionManager
+		var manager *transport.ConnectionManager
 
 		switch conn.Kind() {
-		case evm.HTTP:
+		case transport.HTTP:
 			if client.http == nil {
-				client.http = &evm.ConnectionManager{}
+				client.http = &transport.ConnectionManager{}
 			}
 			manager = client.http
-		case evm.WS:
+		case transport.WS:
 			if client.ws == nil {
-				client.ws = &evm.ConnectionManager{}
+				client.ws = &transport.ConnectionManager{}
 			}
 			manager = client.ws
 		default:
 			if client.config.ErrorOnInvalidResource {
-				return nil, fmt.Errorf("client does not support %s resources", conn.Kind())
+				return nil, fmt.Errorf("rpc does not support %s resources", conn.Kind())
 			}
 			continue
 		}
@@ -107,10 +107,10 @@ func NewRawClient(config *ClientConfig) (*RawClient, error) {
 
 // HTTP returns a ThinClient backed by the HTTP connection pool.
 func (client *RawClient) HTTP() *ThinClient {
-	return newThinClient(evm.HTTP, client.http, client.sequencer, 0)
+	return newThinClient(transport.HTTP, client.http, client.sequencer, 0)
 }
 
 // WS returns a ThinClient backed by the WebSocket connection pool.
 func (client *RawClient) WS() *ThinClient {
-	return newThinClient(evm.WS, client.ws, client.sequencer, client.config.SubscriptionStreamSize)
+	return newThinClient(transport.WS, client.ws, client.sequencer, client.config.SubscriptionStreamSize)
 }

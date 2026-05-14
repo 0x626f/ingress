@@ -1,11 +1,11 @@
-package client
+package rpc
 
 import (
 	"context"
 	"fmt"
 	"time"
 
-	"github.com/0x626f/ingress/evm"
+	"github.com/0x626f/ingress/transport"
 )
 
 type ClientConfig struct {
@@ -32,10 +32,10 @@ type RawClient struct {
 	ctx    context.Context
 	config *ClientConfig
 
-	http *evm.ConnectionManager
-	ws   *evm.ConnectionManager
+	http *transport.ConnectionManager
+	ws   *transport.ConnectionManager
 
-	sequencer *evm.SequenceGenerator
+	sequencer *transport.SequenceGenerator
 }
 
 // NewRawClient constructs a RawClient from the provided config, dialing and
@@ -62,7 +62,7 @@ func NewRawClientWithContext(ctx context.Context, config *ClientConfig) (*RawCli
 	client := &RawClient{
 		ctx:       ctx,
 		config:    config,
-		sequencer: new(evm.SequenceGenerator),
+		sequencer: new(transport.SequenceGenerator),
 	}
 
 	genKeepAliveMessage := func() []byte {
@@ -71,7 +71,7 @@ func NewRawClientWithContext(ctx context.Context, config *ClientConfig) (*RawCli
 	}
 
 	for _, resource := range config.Resources {
-		conn, err := evm.NewRPCConnection(evm.ConnectionParams{
+		conn, err := transport.NewRPCConnection(transport.ConnectionParams{
 			Resource:         resource,
 			Timeout:          config.RequestTimeout,
 			KeepAlivePeriod:  config.KeepAlivePeriod,
@@ -86,19 +86,19 @@ func NewRawClientWithContext(ctx context.Context, config *ClientConfig) (*RawCli
 		}
 
 		switch conn.Kind() {
-		case evm.HTTP:
+		case transport.HTTP:
 			if client.http == nil {
-				client.http = &evm.ConnectionManager{}
+				client.http = &transport.ConnectionManager{}
 			}
 			client.http.AddConnection(conn)
-		case evm.WS:
+		case transport.WS:
 			if client.ws == nil {
-				client.ws = &evm.ConnectionManager{}
+				client.ws = &transport.ConnectionManager{}
 			}
 			client.ws.AddConnection(conn)
 		default:
 			if config.ErrorOnInvalidResource {
-				return nil, fmt.Errorf("client does not support %s resources", conn.Kind())
+				return nil, fmt.Errorf("rpc does not support %s resources", conn.Kind())
 			}
 		}
 	}
@@ -111,18 +111,18 @@ func NewRawClientWithContext(ctx context.Context, config *ClientConfig) (*RawCli
 }
 
 func (client *RawClient) HTTP() *ThinClient {
-	return newThinClientWithContext(client.ctx, evm.HTTP, client.http, client.sequencer, 0)
+	return newThinClientWithContext(client.ctx, transport.HTTP, client.http, client.sequencer, 0)
 }
 
 func (client *RawClient) WS() *ThinClient {
-	return newThinClientWithContext(client.ctx, evm.WS, client.ws, client.sequencer, client.config.SubscriptionStreamSize)
+	return newThinClientWithContext(client.ctx, transport.WS, client.ws, client.sequencer, client.config.SubscriptionStreamSize)
 }
 
-func newThinClient(kind evm.ConnectionKind, manager *evm.ConnectionManager, sequencer *evm.SequenceGenerator, subscriptionBufSize int) *ThinClient {
+func newThinClient(kind transport.ConnectionKind, manager *transport.ConnectionManager, sequencer *transport.SequenceGenerator, subscriptionBufSize int) *ThinClient {
 	return newThinClientWithContext(context.Background(), kind, manager, sequencer, subscriptionBufSize)
 }
 
-func newThinClientWithContext(ctx context.Context, kind evm.ConnectionKind, manager *evm.ConnectionManager, sequencer *evm.SequenceGenerator, subscriptionBufSize int) *ThinClient {
+func newThinClientWithContext(ctx context.Context, kind transport.ConnectionKind, manager *transport.ConnectionManager, sequencer *transport.SequenceGenerator, subscriptionBufSize int) *ThinClient {
 	if subscriptionBufSize == 0 {
 		subscriptionBufSize = 64
 	}

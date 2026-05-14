@@ -1,6 +1,6 @@
 package rpc
 
-import "github.com/0x626f/ingress/evm"
+import "github.com/0x626f/ingress/transport"
 
 // CoreClient is the top-level interface for interacting with an EVM-compatible
 // JSON-RPC node. All methods return raw result bytes with the outer JSON
@@ -37,7 +37,7 @@ type CoreClient interface {
 	GetLogs(LogsQuery) ([]byte, error)
 	// Subscribe creates an eth_subscribe subscription (WebSocket only).
 	// It returns the subscription ID and a channel on which push events are delivered.
-	Subscribe(SubscribeQuery) (evm.Subscription, evm.RStream, error)
+	Subscribe(SubscribeQuery) (transport.Subscription, transport.RStream, error)
 	// UnSubscribe cancels an active eth_subscribe subscription (WebSocket only).
 	UnSubscribe(query UnSubscribeQuery) ([]byte, error)
 }
