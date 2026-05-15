@@ -111,11 +111,31 @@ func NewRawClientWithContext(ctx context.Context, config *ClientConfig) (*RawCli
 }
 
 func (client *RawClient) HTTP() *ThinClient {
+	if !client.HasResourceByProtocol(transport.HTTP) {
+		return nil
+	}
 	return newThinClientWithContext(client.ctx, transport.HTTP, client.http, client.sequencer, 0)
 }
 
 func (client *RawClient) WS() *ThinClient {
+	if !client.HasResourceByProtocol(transport.WS) {
+		return nil
+	}
 	return newThinClientWithContext(client.ctx, transport.WS, client.ws, client.sequencer, client.config.SubscriptionStreamSize)
+}
+
+func (client *RawClient) HasResourceByProtocol(kind transport.ConnectionKind) bool {
+	if client == nil {
+		return false
+	}
+	switch kind {
+	case transport.HTTP:
+		return client.http != nil
+	case transport.WS:
+		return client.ws != nil
+	default:
+		return false
+	}
 }
 
 func newThinClient(kind transport.ConnectionKind, manager *transport.ConnectionManager, sequencer *transport.SequenceGenerator, subscriptionBufSize int) *ThinClient {

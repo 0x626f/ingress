@@ -177,6 +177,18 @@ func TestNewClient_HTTPResource_CreatesHTTPManager(t *testing.T) {
 	if c.ws != nil {
 		t.Error("expected no WS manager")
 	}
+	if !c.HasResourceByProtocol(transport.HTTP) {
+		t.Error("expected HTTP resources to be available")
+	}
+	if c.HasResourceByProtocol(transport.WS) {
+		t.Error("expected WS resources to be unavailable")
+	}
+	if c.HTTP() == nil {
+		t.Error("expected HTTP thin client")
+	}
+	if c.WS() != nil {
+		t.Error("expected nil WS thin client without WS resources")
+	}
 }
 
 func TestNewClient_WSResource_CreatesWSManager(t *testing.T) {
@@ -187,16 +199,28 @@ func TestNewClient_WSResource_CreatesWSManager(t *testing.T) {
 	if c.ws == nil {
 		t.Error("expected WS manager to be created")
 	}
+	if !c.HasResourceByProtocol(transport.WS) {
+		t.Error("expected WS resources to be available")
+	}
+	if c.HasResourceByProtocol(transport.HTTP) {
+		t.Error("expected HTTP resources to be unavailable")
+	}
+	if c.WS() == nil {
+		t.Error("expected WS thin client")
+	}
+	if c.HTTP() != nil {
+		t.Error("expected nil HTTP thin client without HTTP resources")
+	}
 }
 
-func TestClient_MissingTransportManager_ReturnsError(t *testing.T) {
+func TestRawClient_HasResourceByProtocol_UnknownKindReturnsFalse(t *testing.T) {
 	c, err := NewRawClient(&ClientConfig{Resources: []string{"ws://localhost:8546"}})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := c.HTTP().ChainId(); err == nil {
-		t.Error("expected error for HTTP rpc without HTTP resources")
+	if c.HasResourceByProtocol(transport.ConnectionKind(255)) {
+		t.Error("expected unknown protocol to be unavailable")
 	}
 }
 

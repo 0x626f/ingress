@@ -107,10 +107,31 @@ func NewRawClient(config *ClientConfig) (*RawClient, error) {
 
 // HTTP returns a ThinClient backed by the HTTP connection pool.
 func (client *RawClient) HTTP() *ThinClient {
+	if !client.HasResourceByProtocol(transport.HTTP) {
+		return nil
+	}
 	return newThinClient(transport.HTTP, client.http, client.sequencer, 0)
 }
 
 // WS returns a ThinClient backed by the WebSocket connection pool.
 func (client *RawClient) WS() *ThinClient {
+	if !client.HasResourceByProtocol(transport.WS) {
+		return nil
+	}
 	return newThinClient(transport.WS, client.ws, client.sequencer, client.config.SubscriptionStreamSize)
+}
+
+// HasResourceByProtocol reports whether the RawClient has resources for kind.
+func (client *RawClient) HasResourceByProtocol(kind transport.ConnectionKind) bool {
+	if client == nil {
+		return false
+	}
+	switch kind {
+	case transport.HTTP:
+		return client.http != nil
+	case transport.WS:
+		return client.ws != nil
+	default:
+		return false
+	}
 }

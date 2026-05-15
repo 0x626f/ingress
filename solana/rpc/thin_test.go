@@ -11,6 +11,7 @@ import (
 
 	"github.com/0x626f/ingress/solana/model"
 	"github.com/0x626f/ingress/solana/types"
+	"github.com/0x626f/ingress/transport"
 )
 
 const (
@@ -193,6 +194,54 @@ func TestNewRawClient_PublicResources(t *testing.T) {
 	}
 	if raw.WS() == nil {
 		t.Fatal("expected WS thin client")
+	}
+}
+
+func TestNewRawClient_HTTPResourceAvailability(t *testing.T) {
+	raw, err := NewRawClient(&ClientConfig{Resources: []string{"https://api.mainnet-beta.solana.com"}})
+	if err != nil {
+		t.Fatalf("NewRawClient: %v", err)
+	}
+	if !raw.HasResourceByProtocol(transport.HTTP) {
+		t.Fatal("expected HTTP resources to be available")
+	}
+	if raw.HasResourceByProtocol(transport.WS) {
+		t.Fatal("expected WS resources to be unavailable")
+	}
+	if raw.HTTP() == nil {
+		t.Fatal("expected HTTP thin client")
+	}
+	if raw.WS() != nil {
+		t.Fatal("expected nil WS thin client without WS resources")
+	}
+}
+
+func TestNewRawClient_WSResourceAvailability(t *testing.T) {
+	raw, err := NewRawClient(&ClientConfig{Resources: []string{"wss://api.mainnet-beta.solana.com"}})
+	if err != nil {
+		t.Fatalf("NewRawClient: %v", err)
+	}
+	if !raw.HasResourceByProtocol(transport.WS) {
+		t.Fatal("expected WS resources to be available")
+	}
+	if raw.HasResourceByProtocol(transport.HTTP) {
+		t.Fatal("expected HTTP resources to be unavailable")
+	}
+	if raw.WS() == nil {
+		t.Fatal("expected WS thin client")
+	}
+	if raw.HTTP() != nil {
+		t.Fatal("expected nil HTTP thin client without HTTP resources")
+	}
+}
+
+func TestNewRawClient_UnknownResourceProtocolUnavailable(t *testing.T) {
+	raw, err := NewRawClient(&ClientConfig{Resources: []string{"https://api.mainnet-beta.solana.com"}})
+	if err != nil {
+		t.Fatalf("NewRawClient: %v", err)
+	}
+	if raw.HasResourceByProtocol(transport.ConnectionKind(255)) {
+		t.Fatal("expected unknown protocol to be unavailable")
 	}
 }
 
