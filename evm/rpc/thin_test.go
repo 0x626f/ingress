@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,7 +27,7 @@ func (m *mockConnection) Kind() transport.ConnectionKind   { return m.kind }
 func (m *mockConnection) Resource() string                 { return "" }
 func (m *mockConnection) Timeout() time.Duration           { return 0 }
 func (m *mockConnection) Stream() <-chan transport.Message { return nil }
-func (m *mockConnection) Send(data []byte) ([]byte, error) {
+func (m *mockConnection) Send(ctx context.Context, data []byte) ([]byte, error) {
 	m.callCount++
 	m.lastPayload = data
 	return m.response, m.err
@@ -94,7 +95,7 @@ func (m *mockWSConnection) Kind() transport.ConnectionKind   { return m.kind }
 func (m *mockWSConnection) Resource() string                 { return "" }
 func (m *mockWSConnection) Timeout() time.Duration           { return m.timeout }
 func (m *mockWSConnection) Stream() <-chan transport.Message { return m.events }
-func (m *mockWSConnection) Send(data []byte) ([]byte, error) {
+func (m *mockWSConnection) Send(ctx context.Context, data []byte) ([]byte, error) {
 	m.callCount++
 	m.lastPayload = data
 	if m.err != nil {
@@ -230,7 +231,7 @@ func TestRawClient_HasResourceByProtocol_UnknownKindReturnsFalse(t *testing.T) {
 
 func TestClient_ChainId_Method(t *testing.T) {
 	conn := okHTTP()
-	if _, err := withHTTP(conn).ChainId(); err != nil {
+	if _, err := withHTTP(conn).ChainId(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	req := parseReq(t, conn.lastPayload)
@@ -250,7 +251,7 @@ func TestClient_ChainId_Method(t *testing.T) {
 
 func TestClient_BlockNumber_Method(t *testing.T) {
 	conn := &mockConnection{kind: transport.HTTP, response: rpcResp(1, "0x1234")}
-	_, err := withHTTP(conn).BlockNumber()
+	_, err := withHTTP(conn).BlockNumber(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -266,7 +267,7 @@ func TestClient_BlockNumber_Method(t *testing.T) {
 
 func TestClient_GetBalance_DefaultBlockLatest(t *testing.T) {
 	conn := okHTTP()
-	withHTTP(conn).GetBalance(BalanceQuery{AddressedQuery: AddressedQuery{Address: "0xABC"}})
+	withHTTP(conn).GetBalance(context.Background(), BalanceQuery{AddressedQuery: AddressedQuery{Address: "0xABC"}})
 	req := parseReq(t, conn.lastPayload)
 	if req.Method != "eth_getBalance" {
 		t.Errorf("expected eth_getBalance, got %s", req.Method)
@@ -280,7 +281,7 @@ func TestClient_GetBalance_DefaultBlockLatest(t *testing.T) {
 
 func TestClient_GetBalance_CustomBlockTag(t *testing.T) {
 	conn := okHTTP()
-	withHTTP(conn).GetBalance(BalanceQuery{AddressedQuery: AddressedQuery{
+	withHTTP(conn).GetBalance(context.Background(), BalanceQuery{AddressedQuery: AddressedQuery{
 		OnBlockQuery: OnBlockQuery{BlockTag: BlockTagEarliest},
 		Address:      "0xABC",
 	}})
@@ -297,7 +298,7 @@ func TestClient_GetBalance_CustomBlockTag(t *testing.T) {
 
 func TestClient_GetCode_MethodAndParams(t *testing.T) {
 	conn := okHTTP()
-	withHTTP(conn).GetCode(CodeQuery{AddressedQuery: AddressedQuery{Address: "0xDEF"}})
+	withHTTP(conn).GetCode(context.Background(), CodeQuery{AddressedQuery: AddressedQuery{Address: "0xDEF"}})
 	req := parseReq(t, conn.lastPayload)
 	if req.Method != "eth_getCode" {
 		t.Errorf("expected eth_getCode, got %s", req.Method)
@@ -315,7 +316,7 @@ func TestClient_GetCode_MethodAndParams(t *testing.T) {
 
 func TestClient_Call_MethodAndParams(t *testing.T) {
 	conn := okHTTP()
-	withHTTP(conn).Call(CallQuery{To: "0xContract", Data: "0xdeadbeef"})
+	withHTTP(conn).Call(context.Background(), CallQuery{To: "0xContract", Data: "0xdeadbeef"})
 	req := parseReq(t, conn.lastPayload)
 	if req.Method != "eth_call" {
 		t.Errorf("expected eth_call, got %s", req.Method)
@@ -339,7 +340,7 @@ func TestClient_Call_MethodAndParams(t *testing.T) {
 
 func TestClient_Call_CustomBlockTag(t *testing.T) {
 	conn := okHTTP()
-	withHTTP(conn).Call(CallQuery{OnBlockQuery: OnBlockQuery{BlockTag: "pending"}, To: "0x0"})
+	withHTTP(conn).Call(context.Background(), CallQuery{OnBlockQuery: OnBlockQuery{BlockTag: "pending"}, To: "0x0"})
 	var params []json.RawMessage
 	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
 	var tag string
@@ -355,7 +356,7 @@ func TestClient_Call_CustomBlockTag(t *testing.T) {
 
 func TestClient_EstimateGas_RequiredFieldOnly(t *testing.T) {
 	conn := okHTTP()
-	withHTTP(conn).EstimateGas(EstimateGasQuery{To: "0xRecipient"})
+	withHTTP(conn).EstimateGas(context.Background(), EstimateGasQuery{To: "0xRecipient"})
 	req := parseReq(t, conn.lastPayload)
 	if req.Method != "eth_estimateGas" {
 		t.Errorf("expected eth_estimateGas, got %s", req.Method)
@@ -376,7 +377,7 @@ func TestClient_EstimateGas_RequiredFieldOnly(t *testing.T) {
 
 func TestClient_EstimateGas_AllFields_HexEncoded(t *testing.T) {
 	conn := okHTTP()
-	withHTTP(conn).EstimateGas(EstimateGasQuery{
+	withHTTP(conn).EstimateGas(context.Background(), EstimateGasQuery{
 		To:                   "0xTo",
 		From:                 "0xFrom",
 		Data:                 "0xData",
@@ -411,7 +412,7 @@ func TestClient_EstimateGas_AllFields_HexEncoded(t *testing.T) {
 
 func TestClient_EstimateGas_DefaultBlockLatest(t *testing.T) {
 	conn := okHTTP()
-	withHTTP(conn).EstimateGas(EstimateGasQuery{To: "0x0"})
+	withHTTP(conn).EstimateGas(context.Background(), EstimateGasQuery{To: "0x0"})
 	var params []json.RawMessage
 	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
 	var tag string
@@ -427,7 +428,7 @@ func TestClient_EstimateGas_DefaultBlockLatest(t *testing.T) {
 
 func TestClient_SendRawTransaction_MethodAndParams(t *testing.T) {
 	conn := okHTTP()
-	withHTTP(conn).SendRawTransaction(TransactionQuery{Signed: "0xSignedTx"})
+	withHTTP(conn).SendRawTransaction(context.Background(), TransactionQuery{Signed: "0xSignedTx"})
 	req := parseReq(t, conn.lastPayload)
 	if req.Method != "eth_sendRawTransaction" {
 		t.Errorf("expected eth_sendRawTransaction, got %s", req.Method)
@@ -445,7 +446,7 @@ func TestClient_SendRawTransaction_MethodAndParams(t *testing.T) {
 
 func TestClient_GetTransactionByHash_MethodAndParams(t *testing.T) {
 	conn := okHTTP()
-	withHTTP(conn).GetTransactionByHash(TransactionQuery{Hash: "0xHash"})
+	withHTTP(conn).GetTransactionByHash(context.Background(), TransactionQuery{Hash: "0xHash"})
 	req := parseReq(t, conn.lastPayload)
 	if req.Method != "eth_getTransactionByHash" {
 		t.Errorf("expected eth_getTransactionByHash, got %s", req.Method)
@@ -463,7 +464,7 @@ func TestClient_GetTransactionByHash_MethodAndParams(t *testing.T) {
 
 func TestClient_GetTransactionReceipt_MethodAndParams(t *testing.T) {
 	conn := okHTTP()
-	withHTTP(conn).GetTransactionReceipt(TransactionQuery{Hash: "0xHash"})
+	withHTTP(conn).GetTransactionReceipt(context.Background(), TransactionQuery{Hash: "0xHash"})
 	req := parseReq(t, conn.lastPayload)
 	if req.Method != "eth_getTransactionReceipt" {
 		t.Errorf("expected eth_getTransactionReceipt, got %s", req.Method)
@@ -481,7 +482,7 @@ func TestClient_GetTransactionReceipt_MethodAndParams(t *testing.T) {
 
 func TestClient_GetTransactionCount_MethodAndParams(t *testing.T) {
 	conn := okHTTP()
-	withHTTP(conn).GetTransactionCount(AddressedQuery{Address: "0xAddr"})
+	withHTTP(conn).GetTransactionCount(context.Background(), AddressedQuery{Address: "0xAddr"})
 	req := parseReq(t, conn.lastPayload)
 	if req.Method != "eth_getTransactionCount" {
 		t.Errorf("expected eth_getTransactionCount, got %s", req.Method)
@@ -499,7 +500,7 @@ func TestClient_GetTransactionCount_MethodAndParams(t *testing.T) {
 
 func TestClient_GetBlockByNumber_DefaultsToLatest(t *testing.T) {
 	conn := okHTTP()
-	withHTTP(conn).GetBlockByNumber(BlockQuery{})
+	withHTTP(conn).GetBlockByNumber(context.Background(), BlockQuery{})
 	req := parseReq(t, conn.lastPayload)
 	if req.Method != "eth_getBlockByNumber" {
 		t.Errorf("expected eth_getBlockByNumber, got %s", req.Method)
@@ -515,7 +516,7 @@ func TestClient_GetBlockByNumber_DefaultsToLatest(t *testing.T) {
 
 func TestClient_GetBlockByNumber_NumberConvertedToHex(t *testing.T) {
 	conn := okHTTP()
-	withHTTP(conn).GetBlockByNumber(BlockQuery{Number: "1000"})
+	withHTTP(conn).GetBlockByNumber(context.Background(), BlockQuery{Number: "1000"})
 	var params []json.RawMessage
 	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
 	var tag string
@@ -527,7 +528,7 @@ func TestClient_GetBlockByNumber_NumberConvertedToHex(t *testing.T) {
 
 func TestClient_GetBlockByNumber_NumberOverridesBlockTag(t *testing.T) {
 	conn := okHTTP()
-	withHTTP(conn).GetBlockByNumber(BlockQuery{
+	withHTTP(conn).GetBlockByNumber(context.Background(), BlockQuery{
 		OnBlockQuery: OnBlockQuery{BlockTag: BlockTagLatest},
 		Number:       "100",
 	})
@@ -542,7 +543,7 @@ func TestClient_GetBlockByNumber_NumberOverridesBlockTag(t *testing.T) {
 
 func TestClient_GetBlockByNumber_BlockTagPropagated(t *testing.T) {
 	conn := okHTTP()
-	withHTTP(conn).GetBlockByNumber(BlockQuery{OnBlockQuery: OnBlockQuery{BlockTag: BlockTagFinalized}})
+	withHTTP(conn).GetBlockByNumber(context.Background(), BlockQuery{OnBlockQuery: OnBlockQuery{BlockTag: BlockTagFinalized}})
 	var params []json.RawMessage
 	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
 	var tag string
@@ -554,7 +555,7 @@ func TestClient_GetBlockByNumber_BlockTagPropagated(t *testing.T) {
 
 func TestClient_GetBlockByNumber_FullTransactions(t *testing.T) {
 	conn := okHTTP()
-	withHTTP(conn).GetBlockByNumber(BlockQuery{FullTransactions: true})
+	withHTTP(conn).GetBlockByNumber(context.Background(), BlockQuery{FullTransactions: true})
 	var params []json.RawMessage
 	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
 	if len(params) < 2 {
@@ -573,7 +574,7 @@ func TestClient_GetBlockByNumber_FullTransactions(t *testing.T) {
 
 func TestClient_GetBlockByHash_UsesHash(t *testing.T) {
 	conn := okHTTP()
-	withHTTP(conn).GetBlockByHash(BlockQuery{Hash: "0xBlockHash"})
+	withHTTP(conn).GetBlockByHash(context.Background(), BlockQuery{Hash: "0xBlockHash"})
 	req := parseReq(t, conn.lastPayload)
 	if req.Method != "eth_getBlockByHash" {
 		t.Errorf("expected eth_getBlockByHash, got %s", req.Method)
@@ -589,7 +590,7 @@ func TestClient_GetBlockByHash_UsesHash(t *testing.T) {
 
 func TestClient_GetBlockByHash_FallsBackToBlockTag(t *testing.T) {
 	conn := okHTTP()
-	withHTTP(conn).GetBlockByHash(BlockQuery{OnBlockQuery: OnBlockQuery{BlockTag: BlockTagSafe}})
+	withHTTP(conn).GetBlockByHash(context.Background(), BlockQuery{OnBlockQuery: OnBlockQuery{BlockTag: BlockTagSafe}})
 	req := parseReq(t, conn.lastPayload)
 	if req.Method != "eth_getBlockByHash" {
 		t.Errorf("expected eth_getBlockByHash, got %s", req.Method)
@@ -609,7 +610,7 @@ func TestClient_GetBlockByHash_FallsBackToBlockTag(t *testing.T) {
 
 func TestClient_GetLogs_Method(t *testing.T) {
 	conn := okHTTP()
-	withHTTP(conn).GetLogs(LogsQuery{
+	withHTTP(conn).GetLogs(context.Background(), LogsQuery{
 		AddressedQuery: AddressedQuery{Address: "0xContract"},
 		FromBlock:      "0x0",
 		ToBlock:        "0x100",
@@ -623,7 +624,7 @@ func TestClient_GetLogs_Method(t *testing.T) {
 
 func TestClient_GetLogs_DefaultToBlockLatest(t *testing.T) {
 	conn := okHTTP()
-	withHTTP(conn).GetLogs(LogsQuery{
+	withHTTP(conn).GetLogs(context.Background(), LogsQuery{
 		AddressedQuery: AddressedQuery{Address: "0xContract"},
 		FromBlock:      "0x0",
 	})
@@ -640,7 +641,7 @@ func TestClient_GetLogs_DefaultToBlockLatest(t *testing.T) {
 
 func TestClient_GetLogs_AddressAndTopics(t *testing.T) {
 	conn := okHTTP()
-	withHTTP(conn).GetLogs(LogsQuery{
+	withHTTP(conn).GetLogs(context.Background(), LogsQuery{
 		AddressedQuery: AddressedQuery{Address: "0xContract"},
 		Topics:         []string{"0xTopic1", "0xTopic2"},
 	})
@@ -665,14 +666,14 @@ func TestClient_GetLogs_AddressAndTopics(t *testing.T) {
 // ============================================================================
 
 func TestClient_HTTP_Subscribe_ReturnsError(t *testing.T) {
-	_, _, err := withHTTP(okHTTP()).Subscribe(SubscribeQuery{})
+	_, _, err := withHTTP(okHTTP()).Subscribe(context.Background(), SubscribeQuery{})
 	if err == nil {
 		t.Error("expected error: HTTP rpc does not support Subscribe")
 	}
 }
 
 func TestClient_HTTP_UnSubscribe_ReturnsError(t *testing.T) {
-	_, err := withHTTP(okHTTP()).UnSubscribe(UnSubscribeQuery{})
+	_, err := withHTTP(okHTTP()).UnSubscribe(context.Background(), UnSubscribeQuery{})
 	if err == nil {
 		t.Error("expected error: HTTP rpc does not support UnSubscribe")
 	}
@@ -680,7 +681,7 @@ func TestClient_HTTP_UnSubscribe_ReturnsError(t *testing.T) {
 
 func TestWSClient_Subscribe_NewHeads_SendsSingleParam(t *testing.T) {
 	conn := &mockWSConnection{kind: transport.WS, events: make(chan transport.Message, 8), result: "0xsub1"}
-	withWS(conn).Subscribe(SubscribeQuery{On: SubscriptionNewHeads})
+	withWS(conn).Subscribe(context.Background(), SubscribeQuery{On: SubscriptionNewHeads})
 
 	req := parseReq(t, conn.lastPayload)
 	if req.Method != "eth_subscribe" {
@@ -700,7 +701,7 @@ func TestWSClient_Subscribe_NewHeads_SendsSingleParam(t *testing.T) {
 
 func TestWSClient_Subscribe_Logs_IncludesFilterParams(t *testing.T) {
 	conn := &mockWSConnection{kind: transport.WS, events: make(chan transport.Message, 8), result: "0xsub2"}
-	withWS(conn).Subscribe(SubscribeQuery{
+	withWS(conn).Subscribe(context.Background(), SubscribeQuery{
 		On:      SubscriptionLogs,
 		Address: "0xContract",
 		Topics:  []string{"0xTopic"},
@@ -728,7 +729,7 @@ func TestWSClient_Subscribe_Logs_IncludesFilterParams(t *testing.T) {
 
 func TestWSClient_Subscribe_ReturnsSubscriptionIDAndListener(t *testing.T) {
 	conn := &mockWSConnection{kind: transport.WS, events: make(chan transport.Message, 8), result: "0xsub123"}
-	subId, listener, err := withWS(conn).Subscribe(SubscribeQuery{On: SubscriptionNewHeads})
+	subId, listener, err := withWS(conn).Subscribe(context.Background(), SubscribeQuery{On: SubscriptionNewHeads})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -742,7 +743,7 @@ func TestWSClient_Subscribe_ReturnsSubscriptionIDAndListener(t *testing.T) {
 
 func TestWSClient_Subscribe_ListenerReceivesEvents(t *testing.T) {
 	conn := &mockWSConnection{kind: transport.WS, events: make(chan transport.Message, 8), result: "0xsub123"}
-	_, listener, err := withWS(conn).Subscribe(SubscribeQuery{On: SubscriptionNewHeads})
+	_, listener, err := withWS(conn).Subscribe(context.Background(), SubscribeQuery{On: SubscriptionNewHeads})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -769,7 +770,7 @@ func TestWSClient_Subscribe_ListenerRegisteredInMap(t *testing.T) {
 	conn := &mockWSConnection{kind: transport.WS, events: make(chan transport.Message, 8), result: "0xsub999"}
 	client := withWS(conn)
 
-	if _, _, err := client.Subscribe(SubscribeQuery{On: SubscriptionNewHeads}); err != nil {
+	if _, _, err := client.Subscribe(context.Background(), SubscribeQuery{On: SubscriptionNewHeads}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -786,12 +787,12 @@ func TestWSClient_UnSubscribe_RemovesAndClosesListener(t *testing.T) {
 	conn := &mockWSConnection{kind: transport.WS, events: make(chan transport.Message, 8), result: "0xsub999"}
 	client := withWS(conn)
 
-	sub, listener, err := client.Subscribe(SubscribeQuery{On: SubscriptionNewHeads})
+	sub, listener, err := client.Subscribe(context.Background(), SubscribeQuery{On: SubscriptionNewHeads})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if _, err := client.UnSubscribe(UnSubscribeQuery{Subscription: sub}); err != nil {
+	if _, err := client.UnSubscribe(context.Background(), UnSubscribeQuery{Subscription: sub}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -813,7 +814,7 @@ func TestWSClient_UnSubscribe_RemovesAndClosesListener(t *testing.T) {
 
 func TestClient_TransportError_ReturnsError(t *testing.T) {
 	conn := failConn(transport.HTTP)
-	if _, err := withHTTP(conn).ChainId(); err == nil {
+	if _, err := withHTTP(conn).ChainId(context.Background()); err == nil {
 		t.Error("expected error when transport fails")
 	}
 }
@@ -826,7 +827,7 @@ func TestClient_TransportError_ReturnsError(t *testing.T) {
 // IDs in query structs are ignored at the ThinClient level.
 func TestClient_RequestID_StartsAtOne(t *testing.T) {
 	conn := okHTTP()
-	withHTTP(conn).ChainId()
+	withHTTP(conn).ChainId(context.Background())
 	if parseReq(t, conn.lastPayload).ID != 1 {
 		t.Errorf("expected first sequenced ID to be 1, got %d", parseReq(t, conn.lastPayload).ID)
 	}
@@ -836,9 +837,9 @@ func TestClient_RequestID_StrictlyIncreasing(t *testing.T) {
 	conn := okHTTP()
 	client := withHTTP(conn)
 
-	client.ChainId()
+	client.ChainId(context.Background())
 	id1 := parseReq(t, conn.lastPayload).ID
-	client.BlockNumber()
+	client.BlockNumber(context.Background())
 	id2 := parseReq(t, conn.lastPayload).ID
 
 	if id2 <= id1 {
@@ -852,7 +853,7 @@ func TestClient_RequestID_StrictlyIncreasing(t *testing.T) {
 
 func TestWSClient_SequenceId_AutoAssigned(t *testing.T) {
 	conn := okWS()
-	if _, err := withWS(conn).ChainId(); err != nil {
+	if _, err := withWS(conn).ChainId(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if parseReq(t, conn.lastPayload).ID == 0 {
@@ -866,7 +867,7 @@ func TestWSClient_SequenceIds_Increment(t *testing.T) {
 
 	var ids []uint
 	for i := 0; i < 3; i++ {
-		if _, err := client.ChainId(); err != nil {
+		if _, err := client.ChainId(context.Background()); err != nil {
 			t.Fatalf("call %d: %v", i, err)
 		}
 		ids = append(ids, parseReq(t, conn.lastPayload).ID)
@@ -881,7 +882,7 @@ func TestWSClient_SequenceIds_Increment(t *testing.T) {
 
 func TestWSClient_CallerProvidedId_IgnoredInFavourOfSequencer(t *testing.T) {
 	conn := okWS()
-	withWS(conn).GetBalance(BalanceQuery{AddressedQuery: AddressedQuery{
+	withWS(conn).GetBalance(context.Background(), BalanceQuery{AddressedQuery: AddressedQuery{
 		OnBlockQuery: OnBlockQuery{IdentifiedQuery: IdentifiedQuery{Id: 9999}},
 		Address:      "0xABC",
 	}})
@@ -900,7 +901,7 @@ func TestWSClient_CallerProvidedId_IgnoredInFavourOfSequencer(t *testing.T) {
 
 func TestWSClient_ChainId_CorrectMethod(t *testing.T) {
 	conn := okWS()
-	if _, err := withWS(conn).ChainId(); err != nil {
+	if _, err := withWS(conn).ChainId(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if req := parseReq(t, conn.lastPayload); req.Method != "eth_chainId" {
@@ -910,7 +911,7 @@ func TestWSClient_ChainId_CorrectMethod(t *testing.T) {
 
 func TestWSClient_BlockNumber_CorrectMethod(t *testing.T) {
 	conn := okWS()
-	if _, err := withWS(conn).BlockNumber(); err != nil {
+	if _, err := withWS(conn).BlockNumber(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	if req := parseReq(t, conn.lastPayload); req.Method != "eth_blockNumber" {
@@ -920,7 +921,7 @@ func TestWSClient_BlockNumber_CorrectMethod(t *testing.T) {
 
 func TestWSClient_GetBalance_CorrectParams(t *testing.T) {
 	conn := okWS()
-	withWS(conn).GetBalance(BalanceQuery{AddressedQuery: AddressedQuery{Address: "0xABC"}})
+	withWS(conn).GetBalance(context.Background(), BalanceQuery{AddressedQuery: AddressedQuery{Address: "0xABC"}})
 	req := parseReq(t, conn.lastPayload)
 	if req.Method != "eth_getBalance" {
 		t.Errorf("expected eth_getBalance, got %s", req.Method)
@@ -945,7 +946,7 @@ func TestWSClient_ResponseRoutedById(t *testing.T) {
 		events:    events,
 		noRespond: true,
 	}
-	result, err := withWS(conn).ChainId()
+	result, err := withWS(conn).ChainId(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -964,7 +965,7 @@ func TestWSClient_WrongIdInResponse_NotDelivered(t *testing.T) {
 		timeout:   20 * time.Millisecond,
 		noRespond: true,
 	}
-	result, err := withWS(conn).ChainId()
+	result, err := withWS(conn).ChainId(context.Background())
 	if result != nil {
 		t.Errorf("expected nil result when response ID does not match, got %q", result)
 	}
@@ -980,7 +981,7 @@ func TestWSClient_SequentialCalls_EachGetsOwnResponse(t *testing.T) {
 	client := withWS(conn)
 
 	for i := 0; i < 3; i++ {
-		result, err := client.BlockNumber()
+		result, err := client.BlockNumber(context.Background())
 		if err != nil {
 			t.Fatalf("call %d: %v", i, err)
 		}
@@ -1000,7 +1001,7 @@ func TestWSClient_TransportError_ReturnsError(t *testing.T) {
 		events: make(chan transport.Message, 8),
 		err:    errors.New("ws send failed"),
 	}
-	if _, err := withWS(conn).ChainId(); err == nil {
+	if _, err := withWS(conn).ChainId(context.Background()); err == nil {
 		t.Error("expected error when WS transport fails")
 	}
 }
@@ -1020,7 +1021,7 @@ func TestWSClient_MultipleConnections_UsesFirstHealthy(t *testing.T) {
 	client := newThinClient(transport.WS, mgr, new(transport.SequenceGenerator), 10)
 
 	for i := 0; i < 3; i++ {
-		if _, err := client.ChainId(); err != nil {
+		if _, err := client.ChainId(context.Background()); err != nil {
 			t.Fatalf("call %d: %v", i, err)
 		}
 	}
@@ -1044,7 +1045,7 @@ func TestWSClient_MultipleConnections_FallsBackToSecond(t *testing.T) {
 
 	client := newThinClient(transport.WS, mgr, new(transport.SequenceGenerator), 10)
 
-	result, err := client.ChainId()
+	result, err := client.ChainId(context.Background())
 	if err != nil {
 		t.Fatalf("expected fallback to second connection, got: %v", err)
 	}
@@ -1067,7 +1068,7 @@ func TestWSClient_MultipleConnections_AllFail_ReturnsError(t *testing.T) {
 	mgr.AddConnection(first)
 	mgr.AddConnection(second)
 
-	if _, err := newThinClient(transport.WS, mgr, new(transport.SequenceGenerator), 10).ChainId(); err == nil {
+	if _, err := newThinClient(transport.WS, mgr, new(transport.SequenceGenerator), 10).ChainId(context.Background()); err == nil {
 		t.Error("expected error when all connections fail")
 	}
 }
@@ -1097,7 +1098,7 @@ func TestWSClient_Resources_PendingChannel_ClosedWhenStreamDrops(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		_, err := client.ChainId()
+		_, err := client.ChainId(context.Background())
 		done <- err
 	}()
 
@@ -1138,7 +1139,7 @@ func TestWSClient_Resources_StreamsMap_ClearedWhenStreamDrops(t *testing.T) {
 
 	done := make(chan error, 1)
 	go func() {
-		_, err := client.ChainId()
+		_, err := client.ChainId(context.Background())
 		done <- err
 	}()
 
@@ -1169,7 +1170,7 @@ func TestWSClient_Resources_RejectListener_ClosesPendingChannel(t *testing.T) {
 	client := withWS(conn)
 
 	// Times out internally, triggering rejectListener.
-	client.ChainId()
+	client.ChainId(context.Background())
 
 	client.mu.Lock()
 	pendingCount := len(client.pending)
@@ -1186,7 +1187,7 @@ func TestWSClient_Resources_RejectListener_ClosesPendingChannel(t *testing.T) {
 
 func TestWSClient_Resources_SubscriptionListener_ClosedWhenStreamDrops(t *testing.T) {
 	conn := &mockWSConnection{kind: transport.WS, events: make(chan transport.Message, 8), result: "0xsub123"}
-	_, listener, err := withWS(conn).Subscribe(SubscribeQuery{On: SubscriptionNewHeads})
+	_, listener, err := withWS(conn).Subscribe(context.Background(), SubscribeQuery{On: SubscriptionNewHeads})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1207,7 +1208,7 @@ func TestWSClient_Resources_SubscriptionsMap_ClearedWhenStreamDrops(t *testing.T
 	conn := &mockWSConnection{kind: transport.WS, events: make(chan transport.Message, 8), result: "0xsub456"}
 	client := withWS(conn)
 
-	if _, _, err := client.Subscribe(SubscribeQuery{On: SubscriptionNewHeads}); err != nil {
+	if _, _, err := client.Subscribe(context.Background(), SubscribeQuery{On: SubscriptionNewHeads}); err != nil {
 		t.Fatal(err)
 	}
 
@@ -1231,7 +1232,7 @@ func TestWSClient_Resources_RejectSubscription_ClosesListener(t *testing.T) {
 	conn := &mockWSConnection{kind: transport.WS, events: make(chan transport.Message, 8), result: "0xsub789"}
 	client := withWS(conn)
 
-	subId, listener, err := client.Subscribe(SubscribeQuery{On: SubscriptionNewHeads})
+	subId, listener, err := client.Subscribe(context.Background(), SubscribeQuery{On: SubscriptionNewHeads})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,6 +1,10 @@
 package rpc
 
-import "github.com/0x626f/ingress/transport"
+import (
+	"context"
+
+	"github.com/0x626f/ingress/transport"
+)
 
 // CoreClient is the top-level interface for interacting with an EVM-compatible
 // JSON-RPC node. All methods return raw result bytes with the outer JSON
@@ -8,38 +12,38 @@ import "github.com/0x626f/ingress/transport"
 // further deserialization.
 type CoreClient interface {
 	// ChainId returns the chain ID as a hex string (e.g. 0x1 for Ethereum mainnet).
-	ChainId() ([]byte, error)
+	ChainId(context.Context) ([]byte, error)
 	// BlockNumber returns the current head block number as a hex string.
-	BlockNumber() ([]byte, error)
+	BlockNumber(context.Context) ([]byte, error)
 	// GetBalance returns the native balance of the given address.
-	GetBalance(BalanceQuery) ([]byte, error)
+	GetBalance(context.Context, BalanceQuery) ([]byte, error)
 	// GetCode returns the bytecode deployed at the given address.
-	GetCode(CodeQuery) ([]byte, error)
+	GetCode(context.Context, CodeQuery) ([]byte, error)
 	// GetStorageAt returns the value stored at a specific storage slot.
-	GetStorageAt(GetStorageQuery) ([]byte, error)
+	GetStorageAt(context.Context, GetStorageQuery) ([]byte, error)
 	// Call executes a read-only contract call without creating a transaction.
-	Call(CallQuery) ([]byte, error)
+	Call(context.Context, CallQuery) ([]byte, error)
 	// EstimateGas estimates the gas required for the described transaction.
-	EstimateGas(EstimateGasQuery) ([]byte, error)
+	EstimateGas(context.Context, EstimateGasQuery) ([]byte, error)
 	// SendRawTransaction broadcasts a signed, RLP-encoded transaction.
-	SendRawTransaction(TransactionQuery) ([]byte, error)
+	SendRawTransaction(context.Context, TransactionQuery) ([]byte, error)
 	// GetTransactionByHash returns the transaction object for the given hash.
-	GetTransactionByHash(TransactionQuery) ([]byte, error)
+	GetTransactionByHash(context.Context, TransactionQuery) ([]byte, error)
 	// GetTransactionReceipt returns the receipt for the given transaction hash.
-	GetTransactionReceipt(TransactionQuery) ([]byte, error)
+	GetTransactionReceipt(context.Context, TransactionQuery) ([]byte, error)
 	// GetTransactionCount returns the nonce (transaction count) for an address.
-	GetTransactionCount(AddressedQuery) ([]byte, error)
+	GetTransactionCount(context.Context, AddressedQuery) ([]byte, error)
 	// GetBlockByNumber returns a block selected by tag or number.
-	GetBlockByNumber(BlockQuery) ([]byte, error)
+	GetBlockByNumber(context.Context, BlockQuery) ([]byte, error)
 	// GetBlockByHash returns a block selected by hash.
-	GetBlockByHash(BlockQuery) ([]byte, error)
+	GetBlockByHash(context.Context, BlockQuery) ([]byte, error)
 	// GetLogs returns logs matching the given filter.
-	GetLogs(LogsQuery) ([]byte, error)
+	GetLogs(context.Context, LogsQuery) ([]byte, error)
 	// Subscribe creates an eth_subscribe subscription (WebSocket only).
 	// It returns the subscription ID and a channel on which push events are delivered.
-	Subscribe(SubscribeQuery) (transport.Subscription, transport.RStream, error)
+	Subscribe(context.Context, SubscribeQuery) (transport.Subscription, transport.RStream, error)
 	// UnSubscribe cancels an active eth_subscribe subscription (WebSocket only).
-	UnSubscribe(query UnSubscribeQuery) ([]byte, error)
+	UnSubscribe(context.Context, UnSubscribeQuery) ([]byte, error)
 }
 
 // IdentifiedQuery carries an optional caller-supplied request ID.

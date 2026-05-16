@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -59,7 +60,11 @@ func (client *ThinClient) preProcess(params *QueryParams) {
 	client.mu.Unlock()
 }
 
-func (client *ThinClient) postProcess(stream transport.RStream, timeout time.Duration, params *QueryParams, result []byte, failed bool) []byte {
+func (client *ThinClient) postProcess(ctx context.Context, stream transport.RStream, timeout time.Duration, params *QueryParams, result []byte, failed bool) []byte {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	if client.kind == transport.HTTP {
 		return result
 	}
@@ -93,6 +98,9 @@ func (client *ThinClient) postProcess(stream transport.RStream, timeout time.Dur
 			}
 			return msg
 		case <-timer:
+			client.rejectListener(stream, params.Id)
+			return nil
+		case <-ctx.Done():
 			client.rejectListener(stream, params.Id)
 			return nil
 		}
@@ -219,7 +227,11 @@ func (client *ThinClient) respond(source transport.RStream, message transport.Me
 	}
 }
 
-func (client *ThinClient) handle(call func(*QueryParams) ([]byte, error), params *QueryParams) (result []byte, stream transport.RStream, err error) {
+func (client *ThinClient) handle(ctx context.Context, call func(*QueryParams) ([]byte, error), params *QueryParams) (result []byte, stream transport.RStream, err error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	if client.manager == nil {
 		return nil, nil, fmt.Errorf("no %s connection manager configured", client.kind)
 	}
@@ -233,12 +245,15 @@ func (client *ThinClient) handle(call func(*QueryParams) ([]byte, error), params
 
 	var timeout time.Duration
 
-	if result, stream, timeout, err = client.manager.Send(payload); err != nil {
-		_ = client.postProcess(stream, timeout, params, nil, true)
+	if result, stream, timeout, err = client.manager.Send(ctx, payload); err != nil {
+		_ = client.postProcess(ctx, stream, timeout, params, nil, true)
 		return nil, nil, err
 	}
 
-	result = client.postProcess(stream, timeout, params, result, false)
+	result = client.postProcess(ctx, stream, timeout, params, result, false)
+	if err := ctx.Err(); err != nil {
+		return nil, stream, err
+	}
 
 	result, err = APISpec{}.ParseResponse(result)
 	if err != nil {
@@ -253,42 +268,42 @@ func omitStream(result []byte, stream transport.RStream, err error) ([]byte, err
 }
 
 // ChainId calls eth_chainId.
-func (client *ThinClient) ChainId() ([]byte, error) {
-	return omitStream(client.handle(APISpec{}.ChainId, DefaultQueryParams()))
+func (client *ThinClient) ChainId(ctx context.Context) ([]byte, error) {
+	return omitStream(client.handle(ctx, APISpec{}.ChainId, DefaultQueryParams()))
 }
 
 // BlockNumber calls eth_blockNumber.
-func (client *ThinClient) BlockNumber() ([]byte, error) {
-	return omitStream(client.handle(APISpec{}.BlockNumber, DefaultQueryParams()))
+func (client *ThinClient) BlockNumber(ctx context.Context) ([]byte, error) {
+	return omitStream(client.handle(ctx, APISpec{}.BlockNumber, DefaultQueryParams()))
 }
 
 // GetBalance calls eth_getBalance.
-func (client *ThinClient) GetBalance(query BalanceQuery) ([]byte, error) {
-	return omitStream(client.handle(
+func (client *ThinClient) GetBalance(ctx context.Context, query BalanceQuery) ([]byte, error) {
+	return omitStream(client.handle(ctx,
 		APISpec{}.GetBalance,
 		QueryWithId(query.Id, query.Address, getOrDefault(BlockTagLatest, query.BlockTag)),
 	))
 }
 
 // GetCode calls eth_getCode.
-func (client *ThinClient) GetCode(query CodeQuery) ([]byte, error) {
-	return omitStream(client.handle(
+func (client *ThinClient) GetCode(ctx context.Context, query CodeQuery) ([]byte, error) {
+	return omitStream(client.handle(ctx,
 		APISpec{}.GetCode,
 		QueryWithId(query.Id, query.Address, getOrDefault(BlockTagLatest, query.BlockTag)),
 	))
 }
 
 // GetStorageAt calls eth_getStorageAt.
-func (client *ThinClient) GetStorageAt(query GetStorageQuery) ([]byte, error) {
-	return omitStream(client.handle(
+func (client *ThinClient) GetStorageAt(ctx context.Context, query GetStorageQuery) ([]byte, error) {
+	return omitStream(client.handle(ctx,
 		APISpec{}.GetStorageAt,
 		QueryWithId(query.Id, query.Address, stringToHex(query.Slot), getOrDefault(BlockTagLatest, query.BlockTag)),
 	))
 }
 
 // Call calls eth_call.
-func (client *ThinClient) Call(query CallQuery) ([]byte, error) {
-	return omitStream(client.handle(
+func (client *ThinClient) Call(ctx context.Context, query CallQuery) ([]byte, error) {
+	return omitStream(client.handle(ctx,
 		APISpec{}.Call,
 		QueryWithId(
 			query.Id,
@@ -299,7 +314,7 @@ func (client *ThinClient) Call(query CallQuery) ([]byte, error) {
 }
 
 // EstimateGas calls eth_estimateGas.
-func (client *ThinClient) EstimateGas(query EstimateGasQuery) ([]byte, error) {
+func (client *ThinClient) EstimateGas(ctx context.Context, query EstimateGasQuery) ([]byte, error) {
 	rpcCallData := make(map[string]string)
 
 	rpcCallData["to"] = query.To
@@ -336,7 +351,7 @@ func (client *ThinClient) EstimateGas(query EstimateGasQuery) ([]byte, error) {
 		rpcCallData["nonce"] = stringToHexOrDefault(query.Nonce)
 	}
 
-	return omitStream(client.handle(
+	return omitStream(client.handle(ctx,
 		APISpec{}.EstimateGas,
 		QueryWithId(
 			query.Id,
@@ -347,8 +362,8 @@ func (client *ThinClient) EstimateGas(query EstimateGasQuery) ([]byte, error) {
 }
 
 // SendRawTransaction calls eth_sendRawTransaction.
-func (client *ThinClient) SendRawTransaction(query TransactionQuery) ([]byte, error) {
-	return omitStream(client.handle(
+func (client *ThinClient) SendRawTransaction(ctx context.Context, query TransactionQuery) ([]byte, error) {
+	return omitStream(client.handle(ctx,
 		APISpec{}.SendRawTransaction,
 		QueryWithId(
 			query.Id,
@@ -358,8 +373,8 @@ func (client *ThinClient) SendRawTransaction(query TransactionQuery) ([]byte, er
 }
 
 // GetTransactionByHash calls eth_getTransactionByHash.
-func (client *ThinClient) GetTransactionByHash(query TransactionQuery) ([]byte, error) {
-	return omitStream(client.handle(
+func (client *ThinClient) GetTransactionByHash(ctx context.Context, query TransactionQuery) ([]byte, error) {
+	return omitStream(client.handle(ctx,
 		APISpec{}.GetTransactionByHash,
 		QueryWithId(
 			query.Id,
@@ -369,8 +384,8 @@ func (client *ThinClient) GetTransactionByHash(query TransactionQuery) ([]byte, 
 }
 
 // GetTransactionReceipt calls eth_getTransactionReceipt.
-func (client *ThinClient) GetTransactionReceipt(query TransactionQuery) ([]byte, error) {
-	return omitStream(client.handle(
+func (client *ThinClient) GetTransactionReceipt(ctx context.Context, query TransactionQuery) ([]byte, error) {
+	return omitStream(client.handle(ctx,
 		APISpec{}.GetTransactionReceipt,
 		QueryWithId(
 			query.Id,
@@ -380,8 +395,8 @@ func (client *ThinClient) GetTransactionReceipt(query TransactionQuery) ([]byte,
 }
 
 // GetTransactionCount calls eth_getTransactionCount (nonce).
-func (client *ThinClient) GetTransactionCount(query AddressedQuery) ([]byte, error) {
-	return omitStream(client.handle(
+func (client *ThinClient) GetTransactionCount(ctx context.Context, query AddressedQuery) ([]byte, error) {
+	return omitStream(client.handle(ctx,
 		APISpec{}.GetTransactionCount,
 		QueryWithId(
 			query.Id,
@@ -392,35 +407,35 @@ func (client *ThinClient) GetTransactionCount(query AddressedQuery) ([]byte, err
 }
 
 // GetBlockByNumber calls eth_getBlockByNumber.
-func (client *ThinClient) GetBlockByNumber(query BlockQuery) ([]byte, error) {
+func (client *ThinClient) GetBlockByNumber(ctx context.Context, query BlockQuery) ([]byte, error) {
 	tag := getOrDefault(BlockTagLatest, query.BlockTag)
 
 	if query.Number != "" {
 		tag = stringToHex(query.Number)
 	}
 
-	return omitStream(client.handle(
+	return omitStream(client.handle(ctx,
 		APISpec{}.GetBlockByNumber,
 		QueryWithId(query.Id, tag, query.FullTransactions),
 	))
 }
 
 // GetBlockByHash calls eth_getBlockByHash.
-func (client *ThinClient) GetBlockByHash(query BlockQuery) ([]byte, error) {
+func (client *ThinClient) GetBlockByHash(ctx context.Context, query BlockQuery) ([]byte, error) {
 	tag := getOrDefault(BlockTagLatest, query.BlockTag)
 
 	if query.Hash != "" {
 		tag = query.Hash
 	}
 
-	return omitStream(client.handle(
+	return omitStream(client.handle(ctx,
 		APISpec{}.GetBlockByHash,
 		QueryWithId(query.Id, tag, query.FullTransactions),
 	))
 }
 
 // GetLogs calls eth_getLogs.
-func (client *ThinClient) GetLogs(query LogsQuery) ([]byte, error) {
+func (client *ThinClient) GetLogs(ctx context.Context, query LogsQuery) ([]byte, error) {
 	rpcCallData := map[string]any{
 		"fromBlock": query.FromBlock,
 		"toBlock":   getOrDefault(BlockTagLatest, query.ToBlock),
@@ -428,7 +443,7 @@ func (client *ThinClient) GetLogs(query LogsQuery) ([]byte, error) {
 		"topics":    query.Topics,
 	}
 
-	return omitStream(client.handle(
+	return omitStream(client.handle(ctx,
 		APISpec{}.GetLogs,
 		QueryWithId(query.Id, rpcCallData),
 	))
@@ -437,7 +452,7 @@ func (client *ThinClient) GetLogs(query LogsQuery) ([]byte, error) {
 // Subscribe calls eth_subscribe and registers a local listener channel.
 // It is only supported on WebSocket clients. Returns the subscription ID and
 // a channel on which push events are delivered until UnSubscribe is called.
-func (client *ThinClient) Subscribe(query SubscribeQuery) (transport.Subscription, transport.RStream, error) {
+func (client *ThinClient) Subscribe(ctx context.Context, query SubscribeQuery) (transport.Subscription, transport.RStream, error) {
 	if client.kind != transport.WS {
 		return "", nil, fmt.Errorf("%s rpc doesn't support subscribe method", client.kind)
 	}
@@ -459,7 +474,7 @@ func (client *ThinClient) Subscribe(query SubscribeQuery) (transport.Subscriptio
 	var err error
 
 	if len(meta) > 0 {
-		subscription, stream, err = client.handle(
+		subscription, stream, err = client.handle(ctx,
 			APISpec{}.Subscribe,
 			QueryWithId(
 				query.Id,
@@ -468,7 +483,7 @@ func (client *ThinClient) Subscribe(query SubscribeQuery) (transport.Subscriptio
 			),
 		)
 	} else {
-		subscription, stream, err = client.handle(
+		subscription, stream, err = client.handle(ctx,
 			APISpec{}.Subscribe,
 			QueryWithId(
 				query.Id,
@@ -496,12 +511,12 @@ func (client *ThinClient) Subscribe(query SubscribeQuery) (transport.Subscriptio
 
 // UnSubscribe calls eth_unsubscribe and tears down the local listener.
 // It is only supported on WebSocket clients.
-func (client *ThinClient) UnSubscribe(query UnSubscribeQuery) ([]byte, error) {
+func (client *ThinClient) UnSubscribe(ctx context.Context, query UnSubscribeQuery) ([]byte, error) {
 	if client.kind != transport.WS {
 		return nil, fmt.Errorf("%s rpc doesn't support subscribe method", client.kind)
 	}
 
-	result, err := omitStream(client.handle(
+	result, err := omitStream(client.handle(ctx,
 		APISpec{}.Unsubscribe,
 		QueryWithId(
 			query.Id,

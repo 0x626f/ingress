@@ -1,6 +1,7 @@
 package evm
 
 import (
+	"context"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -155,18 +156,18 @@ type stubConn struct {
 	err      error
 }
 
-func (s *stubConn) Kind() ConnectionKind        { return HTTP }
-func (s *stubConn) Resource() string            { return "" }
-func (s *stubConn) Timeout() time.Duration      { return 0 }
-func (s *stubConn) Stream() <-chan Message      { return nil }
-func (s *stubConn) Send([]byte) ([]byte, error) { return s.response, s.err }
+func (s *stubConn) Kind() ConnectionKind                         { return HTTP }
+func (s *stubConn) Resource() string                             { return "" }
+func (s *stubConn) Timeout() time.Duration                       { return 0 }
+func (s *stubConn) Stream() <-chan Message                       { return nil }
+func (s *stubConn) Send(context.Context, []byte) ([]byte, error) { return s.response, s.err }
 
 func TestConnectionManager_Send_FirstSucceeds(t *testing.T) {
 	mgr := &ConnectionManager{}
 	mgr.AddConnection(&stubConn{response: []byte("first")})
 	mgr.AddConnection(&stubConn{response: []byte("second")})
 
-	result, _, _, err := mgr.Send(nil)
+	result, _, _, err := mgr.Send(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +181,7 @@ func TestConnectionManager_Send_FirstFails_FallsBackToSecond(t *testing.T) {
 	mgr.AddConnection(&stubConn{err: errors.New("fail")})
 	mgr.AddConnection(&stubConn{response: []byte("fallback")})
 
-	result, _, _, err := mgr.Send(nil)
+	result, _, _, err := mgr.Send(context.Background(), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +195,7 @@ func TestConnectionManager_Send_AllFail_ReturnsError(t *testing.T) {
 	mgr.AddConnection(&stubConn{err: errors.New("err1")})
 	mgr.AddConnection(&stubConn{err: errors.New("err2")})
 
-	if _, _, _, err := mgr.Send(nil); err == nil {
+	if _, _, _, err := mgr.Send(context.Background(), nil); err == nil {
 		t.Error("expected error when all connections fail")
 	}
 }
@@ -219,7 +220,7 @@ func TestHttpConnection_Send_ReturnsBody(t *testing.T) {
 	defer srv.Close()
 
 	conn := &HttpConnection{BaseConnection{resource: srv.URL, kind: HTTP}}
-	result, err := conn.Send([]byte(`{"id":1}`))
+	result, err := conn.Send(context.Background(), []byte(`{"id":1}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,7 +231,7 @@ func TestHttpConnection_Send_ReturnsBody(t *testing.T) {
 
 func TestHttpConnection_Send_ConnectionRefused(t *testing.T) {
 	conn := &HttpConnection{BaseConnection{resource: "http://127.0.0.1:1", kind: HTTP}}
-	if _, err := conn.Send([]byte(`{}`)); err == nil {
+	if _, err := conn.Send(context.Background(), []byte(`{}`)); err == nil {
 		t.Error("expected connection error")
 	}
 }
@@ -259,7 +260,7 @@ func TestWsConnection_Send_WritesPayload(t *testing.T) {
 	defer srv.Close()
 
 	conn, _ := NewRPCConnection(ConnectionParams{Resource: wsURL(srv.URL)})
-	if _, err := conn.Send([]byte(`{"id":1,"method":"test"}`)); err != nil {
+	if _, err := conn.Send(context.Background(), []byte(`{"id":1,"method":"test"}`)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -278,7 +279,7 @@ func TestWsConnection_Send_ReturnsNilBytes(t *testing.T) {
 	defer srv.Close()
 
 	conn, _ := NewRPCConnection(ConnectionParams{Resource: wsURL(srv.URL)})
-	result, err := conn.Send([]byte(`{}`))
+	result, err := conn.Send(context.Background(), []byte(`{}`))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -289,7 +290,7 @@ func TestWsConnection_Send_ReturnsNilBytes(t *testing.T) {
 
 func TestWsConnection_Send_ConnectError(t *testing.T) {
 	conn, _ := NewRPCConnection(ConnectionParams{Resource: "ws://127.0.0.1:1"})
-	if _, err := conn.Send([]byte(`{}`)); err == nil {
+	if _, err := conn.Send(context.Background(), []byte(`{}`)); err == nil {
 		t.Error("expected error when connecting to unreachable endpoint")
 	}
 }
@@ -305,7 +306,7 @@ func TestWsConnection_Send_ConcurrentSafe(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			conn.Send([]byte(`{"id":1}`))
+			conn.Send(context.Background(), []byte(`{"id":1}`))
 		}()
 	}
 	wg.Wait()
@@ -335,7 +336,7 @@ func TestWsConnection_Stream_ReceivesServerEvents(t *testing.T) {
 	// Obtain stream before Send so we hold the channel for this connection cycle
 	// before the server closes and close nulls connection.events.
 	stream := conn.Stream()
-	conn.Send([]byte(`{}`))
+	conn.Send(context.Background(), []byte(`{}`))
 
 	data, ok := mustRecv(t, stream, time.Second)
 	if !ok {
@@ -354,7 +355,7 @@ func TestWsConnection_Stream_ClosedOnServerDisconnect(t *testing.T) {
 
 	// Obtain stream before Send — same reasoning as above.
 	stream := conn.Stream()
-	conn.Send([]byte(`{}`))
+	conn.Send(context.Background(), []byte(`{}`))
 
 	// Drain any buffered events; the channel must eventually close.
 	deadline := time.After(time.Second)
@@ -378,7 +379,7 @@ func TestWsConnection_Stream_DropsOldListenersOnReconnect(t *testing.T) {
 	conn, _ := NewRPCConnection(ConnectionParams{Resource: wsURL(srv.URL)})
 
 	// First connection cycle.
-	conn.Send([]byte(`{}`))
+	conn.Send(context.Background(), []byte(`{}`))
 	first := conn.Stream()
 
 	// Force disconnect — old channel must close to signal previous listeners.
@@ -394,7 +395,7 @@ func TestWsConnection_Stream_DropsOldListenersOnReconnect(t *testing.T) {
 	}
 
 	// Reconnect and verify a distinct fresh channel is returned.
-	conn.Send([]byte(`{}`))
+	conn.Send(context.Background(), []byte(`{}`))
 	second := conn.Stream()
 
 	if second == first {
@@ -418,7 +419,7 @@ func TestWsConnection_CloseConn_Idempotent(t *testing.T) {
 		events:         make(chan Message, 64),
 		eventsSize:     64,
 	}
-	if err := conn.connect(); err != nil {
+	if err := conn.connect(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -436,7 +437,7 @@ func TestWsConnection_CloseConn_ClosesStream(t *testing.T) {
 		events:         make(chan Message, 64),
 		eventsSize:     64,
 	}
-	if err := conn.connect(); err != nil {
+	if err := conn.connect(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 
@@ -499,7 +500,7 @@ func TestWsConnection_KeepAlive_SendsPingWhenIdle(t *testing.T) {
 		Resource:        wsURL(srv.URL),
 		KeepAlivePeriod: 30 * time.Millisecond,
 	})
-	conn.Send([]byte(`{}`)) // trigger connection
+	conn.Send(context.Background(), []byte(`{}`)) // trigger connection
 
 	// Wait for at least one ping.
 	deadline := time.After(300 * time.Millisecond)
@@ -526,7 +527,7 @@ func TestWsConnection_KeepAlive_TimerResetsOnActivity(t *testing.T) {
 		Resource:        wsURL(srv.URL),
 		KeepAlivePeriod: period,
 	})
-	conn.Send([]byte(`{}`)) // trigger connection
+	conn.Send(context.Background(), []byte(`{}`)) // trigger connection
 
 	// Keep sending within the period — timer should keep resetting so no ping fires.
 	end := time.After(period * 3)
@@ -540,7 +541,7 @@ func TestWsConnection_KeepAlive_TimerResetsOnActivity(t *testing.T) {
 			}
 			return
 		case <-tick.C:
-			conn.Send([]byte(`{}`))
+			conn.Send(context.Background(), []byte(`{}`))
 		}
 	}
 }
@@ -575,7 +576,7 @@ func TestWsConnection_KeepAlive_ApplicationLevelMessage(t *testing.T) {
 		KeepAliveMessage: func() []byte { return keepAliveMsg },
 	})
 
-	conn.Send([]byte(`{"id":1}`))
+	conn.Send(context.Background(), []byte(`{"id":1}`))
 	<-received // consume the initial send
 
 	select {
@@ -609,7 +610,7 @@ func TestWsConnection_MultipleConnections_IndependentStreams(t *testing.T) {
 	}
 
 	// Send on conn1 only.
-	conn1.Send([]byte(`{"id":1}`))
+	conn1.Send(context.Background(), []byte(`{"id":1}`))
 
 	select {
 	case <-stream1:
@@ -636,8 +637,8 @@ func TestWsConnection_MultipleConnections_CloseOneDoesNotAffectOther(t *testing.
 	conn1, _ := NewRPCConnection(ConnectionParams{Resource: wsURL(srv1.URL)})
 	conn2, _ := NewRPCConnection(ConnectionParams{Resource: wsURL(srv2.URL)})
 
-	conn1.Send([]byte(`{}`))
-	conn2.Send([]byte(`{}`))
+	conn1.Send(context.Background(), []byte(`{}`))
+	conn2.Send(context.Background(), []byte(`{}`))
 
 	stream1 := conn1.Stream()
 	stream2 := conn2.Stream()
@@ -659,7 +660,7 @@ func TestWsConnection_MultipleConnections_CloseOneDoesNotAffectOther(t *testing.
 	}
 
 	// conn2 must still work.
-	if _, err := conn2.Send([]byte(`{"id":2}`)); err != nil {
+	if _, err := conn2.Send(context.Background(), []byte(`{"id":2}`)); err != nil {
 		t.Errorf("conn2 should still be functional: %v", err)
 	}
 	mustRecv(t, stream2, time.Second)
@@ -683,14 +684,14 @@ func TestConnectionManager_MultipleWS_FallbackOnSendError(t *testing.T) {
 	conn2, _ := NewRPCConnection(ConnectionParams{Resource: wsURL(srv2.URL)})
 
 	// Trigger conn1 to connect (and discover the broken socket) before the manager test.
-	conn1.Send([]byte(`{}`))
+	conn1.Send(context.Background(), []byte(`{}`))
 	time.Sleep(50 * time.Millisecond) // let listen() detect the closed socket
 
 	mgr := &ConnectionManager{}
 	mgr.AddConnection(conn1)
 	mgr.AddConnection(conn2)
 
-	_, stream, _, err := mgr.Send([]byte(`{"id":1}`))
+	_, stream, _, err := mgr.Send(context.Background(), []byte(`{"id":1}`))
 	if err != nil {
 		t.Fatalf("expected fallback to succeed, got: %v", err)
 	}

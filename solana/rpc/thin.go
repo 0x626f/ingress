@@ -62,12 +62,16 @@ func buildRequestWithID(id uint, method string, params any) ([]byte, error) {
 	}
 }
 
-func (client *ThinClient) call(method string, params any) (*Response, error) {
+func (client *ThinClient) call(ctx context.Context, method string, params any) (*Response, error) {
 	manager := client.manager
-	return client.callWithManager(manager, method, params)
+	return client.callWithManager(ctx, manager, method, params)
 }
 
-func (client *ThinClient) callWithManager(manager *transport.ConnectionManager, method string, params any) (*Response, error) {
+func (client *ThinClient) callWithManager(ctx context.Context, manager *transport.ConnectionManager, method string, params any) (*Response, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	if manager == nil {
 		return nil, fmt.Errorf("no %s connection manager configured", client.kind)
 	}
@@ -81,7 +85,7 @@ func (client *ThinClient) callWithManager(manager *transport.ConnectionManager, 
 		return nil, err
 	}
 
-	body, stream, timeout, err := manager.Send(data)
+	body, stream, timeout, err := manager.Send(ctx, data)
 	if err != nil {
 		return nil, err
 	}
@@ -98,6 +102,8 @@ func (client *ThinClient) callWithManager(manager *transport.ConnectionManager, 
 			body = message
 		case <-timer:
 			return nil, fmt.Errorf("rpc response timeout")
+		case <-ctx.Done():
+			return nil, ctx.Err()
 		}
 	}
 	if len(body) == 0 {
@@ -112,8 +118,8 @@ func (client *ThinClient) callWithManager(manager *transport.ConnectionManager, 
 	return &Response{Result: json.RawMessage(result)}, nil
 }
 
-func (client *ThinClient) SubscribeSlot() (chan *Event[types.Slot], error) {
-	subscription, err := client.SlotSubscribe()
+func (client *ThinClient) SubscribeSlot(ctx context.Context) (chan *Event[types.Slot], error) {
+	subscription, err := client.SlotSubscribe(ctx)
 	if err != nil {
 		return nil, err
 	}

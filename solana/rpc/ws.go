@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -41,18 +42,22 @@ func (subscription *Subscription) Unsubscribe() error {
 			if err != nil {
 				return
 			}
-			_, _, _, err = subscription.manager.Send(payload)
+			_, _, _, err = subscription.manager.Send(subscription.client.ctx, payload)
 			return
 		}
 	})
 	return err
 }
 
-func (client *ThinClient) RawSubscribe(subscribeMethod, unsubscribeMethod string, params ...any) (*Subscription, error) {
-	return client.rawSubscribeWithManager(subscribeMethod, unsubscribeMethod, params...)
+func (client *ThinClient) RawSubscribe(ctx context.Context, subscribeMethod, unsubscribeMethod string, params ...any) (*Subscription, error) {
+	return client.rawSubscribeWithManager(ctx, subscribeMethod, unsubscribeMethod, params...)
 }
 
-func (client *ThinClient) rawSubscribeWithManager(subscribeMethod, unsubscribeMethod string, params ...any) (*Subscription, error) {
+func (client *ThinClient) rawSubscribeWithManager(ctx context.Context, subscribeMethod, unsubscribeMethod string, params ...any) (*Subscription, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	manager := client.manager
 	if manager == nil {
 		return nil, fmt.Errorf("no %s connection manager configured", client.kind)
@@ -67,7 +72,7 @@ func (client *ThinClient) rawSubscribeWithManager(subscribeMethod, unsubscribeMe
 		return nil, err
 	}
 
-	_, stream, timeout, err := manager.Send(payload)
+	_, stream, timeout, err := manager.Send(ctx, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -89,6 +94,8 @@ func (client *ThinClient) rawSubscribeWithManager(subscribeMethod, unsubscribeMe
 		data = message
 	case <-timer:
 		return nil, fmt.Errorf("subscription confirmation timeout")
+	case <-ctx.Done():
+		return nil, ctx.Err()
 	}
 
 	subscriptionID, err := parseSubscriptionID(data)
@@ -178,58 +185,58 @@ func parseSubscriptionID(data []byte) (uint64, error) {
 	return 0, fmt.Errorf("missing subscription id")
 }
 
-func (client *ThinClient) AccountSubscribe(pubkey string, config ...any) (*Subscription, error) {
-	return client.RawSubscribe(
+func (client *ThinClient) AccountSubscribe(ctx context.Context, pubkey string, config ...any) (*Subscription, error) {
+	return client.RawSubscribe(ctx,
 		RPCMethodAccountSubscribe,
 		RPCMethodAccountUnsubscribe,
 		optionalParams([]any{pubkey}, firstOptional(config))...,
 	)
 }
 
-func (client *ThinClient) BlockSubscribe(filter any, config ...any) (*Subscription, error) {
-	return client.RawSubscribe(
+func (client *ThinClient) BlockSubscribe(ctx context.Context, filter any, config ...any) (*Subscription, error) {
+	return client.RawSubscribe(ctx,
 		RPCMethodBlockSubscribe,
 		RPCMethodBlockUnsubscribe,
 		optionalParams([]any{filter}, firstOptional(config))...,
 	)
 }
 
-func (client *ThinClient) LogsSubscribe(filter any, config ...any) (*Subscription, error) {
-	return client.RawSubscribe(
+func (client *ThinClient) LogsSubscribe(ctx context.Context, filter any, config ...any) (*Subscription, error) {
+	return client.RawSubscribe(ctx,
 		RPCMethodLogsSubscribe,
 		RPCMethodLogsUnsubscribe,
 		optionalParams([]any{filter}, firstOptional(config))...,
 	)
 }
 
-func (client *ThinClient) ProgramSubscribe(programID string, config ...any) (*Subscription, error) {
-	return client.RawSubscribe(
+func (client *ThinClient) ProgramSubscribe(ctx context.Context, programID string, config ...any) (*Subscription, error) {
+	return client.RawSubscribe(ctx,
 		RPCMethodProgramSubscribe,
 		RPCMethodProgramUnsubscribe,
 		optionalParams([]any{programID}, firstOptional(config))...,
 	)
 }
 
-func (client *ThinClient) RootSubscribe() (*Subscription, error) {
-	return client.RawSubscribe(RPCMethodRootSubscribe, RPCMethodRootUnsubscribe)
+func (client *ThinClient) RootSubscribe(ctx context.Context) (*Subscription, error) {
+	return client.RawSubscribe(ctx, RPCMethodRootSubscribe, RPCMethodRootUnsubscribe)
 }
 
-func (client *ThinClient) SignatureSubscribe(signature string, config ...any) (*Subscription, error) {
-	return client.RawSubscribe(
+func (client *ThinClient) SignatureSubscribe(ctx context.Context, signature string, config ...any) (*Subscription, error) {
+	return client.RawSubscribe(ctx,
 		RPCMethodSignatureSubscribe,
 		RPCMethodSignatureUnsubscribe,
 		optionalParams([]any{signature}, firstOptional(config))...,
 	)
 }
 
-func (client *ThinClient) SlotSubscribe() (*Subscription, error) {
-	return client.RawSubscribe(RPCMethodSlotSubscribe, RPCMethodSlotUnsubscribe)
+func (client *ThinClient) SlotSubscribe(ctx context.Context) (*Subscription, error) {
+	return client.RawSubscribe(ctx, RPCMethodSlotSubscribe, RPCMethodSlotUnsubscribe)
 }
 
-func (client *ThinClient) SlotsUpdatesSubscribe() (*Subscription, error) {
-	return client.RawSubscribe(RPCMethodSlotsUpdatesSubscribe, RPCMethodSlotsUpdatesUnsubscribe)
+func (client *ThinClient) SlotsUpdatesSubscribe(ctx context.Context) (*Subscription, error) {
+	return client.RawSubscribe(ctx, RPCMethodSlotsUpdatesSubscribe, RPCMethodSlotsUpdatesUnsubscribe)
 }
 
-func (client *ThinClient) VoteSubscribe() (*Subscription, error) {
-	return client.RawSubscribe(RPCMethodVoteSubscribe, RPCMethodVoteUnsubscribe)
+func (client *ThinClient) VoteSubscribe(ctx context.Context) (*Subscription, error) {
+	return client.RawSubscribe(ctx, RPCMethodVoteSubscribe, RPCMethodVoteUnsubscribe)
 }

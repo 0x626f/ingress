@@ -1,6 +1,7 @@
 package rpc
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -26,123 +27,123 @@ func firstOptional(optional []any) any {
 	return optional[0]
 }
 
-func (client *ThinClient) RawCall(method string, params ...any) (types.RawResult, error) {
-	response, err := client.call(method, params)
+func (client *ThinClient) RawCall(ctx context.Context, method string, params ...any) (types.RawResult, error) {
+	response, err := client.call(ctx, method, params)
 	if err != nil {
 		return nil, err
 	}
 	return types.RawResult(response.Result), nil
 }
 
-func (client *ThinClient) GetAccountInfo(pubkey string, config ...any) (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetAccountInfo, optionalParams([]any{pubkey}, firstOptional(config))...)
+func (client *ThinClient) GetAccountInfo(ctx context.Context, pubkey string, config ...any) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetAccountInfo, optionalParams([]any{pubkey}, firstOptional(config))...)
 }
 
-func (client *ThinClient) GetBalance(pubkey string, config ...any) (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetBalance, optionalParams([]any{pubkey}, firstOptional(config))...)
+func (client *ThinClient) GetBalance(ctx context.Context, pubkey string, config ...any) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetBalance, optionalParams([]any{pubkey}, firstOptional(config))...)
 }
 
-func (client *ThinClient) GetLargestAccounts(config ...any) (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetLargestAccounts, optionalParams(nil, firstOptional(config))...)
+func (client *ThinClient) GetLargestAccounts(ctx context.Context, config ...any) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetLargestAccounts, optionalParams(nil, firstOptional(config))...)
 }
 
-func (client *ThinClient) GetMinimumBalanceForRentExemption(dataSize uint64, commitment ...types.Commitment) (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetMinimumBalanceForRentExemption, optionalParams([]any{dataSize}, commitmentConfig(commitment...))...)
+func (client *ThinClient) GetMinimumBalanceForRentExemption(ctx context.Context, dataSize uint64, commitment ...types.Commitment) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetMinimumBalanceForRentExemption, optionalParams([]any{dataSize}, commitmentConfig(commitment...))...)
 }
 
-func (client *ThinClient) GetMultipleAccounts(pubkeys []string, config ...any) (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetMultipleAccounts, optionalParams([]any{pubkeys}, firstOptional(config))...)
+func (client *ThinClient) GetMultipleAccounts(ctx context.Context, pubkeys []string, config ...any) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetMultipleAccounts, optionalParams([]any{pubkeys}, firstOptional(config))...)
 }
 
-func (client *ThinClient) GetProgramAccounts(programID string, config ...any) (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetProgramAccounts, optionalParams([]any{programID}, firstOptional(config))...)
+func (client *ThinClient) GetProgramAccounts(ctx context.Context, programID string, config ...any) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetProgramAccounts, optionalParams([]any{programID}, firstOptional(config))...)
 }
 
-func (client *ThinClient) GetTokenAccountBalance(pubkey string, commitment ...types.Commitment) (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetTokenAccountBalance, optionalParams([]any{pubkey}, commitmentConfig(commitment...))...)
+func (client *ThinClient) GetTokenAccountBalance(ctx context.Context, pubkey string, commitment ...types.Commitment) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetTokenAccountBalance, optionalParams([]any{pubkey}, commitmentConfig(commitment...))...)
 }
 
-func (client *ThinClient) GetTokenAccountsByDelegate(delegate string, filter any, config ...any) (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetTokenAccountsByDelegate, optionalParams([]any{delegate, filter}, firstOptional(config))...)
+func (client *ThinClient) GetTokenAccountsByDelegate(ctx context.Context, delegate string, filter any, config ...any) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetTokenAccountsByDelegate, optionalParams([]any{delegate, filter}, firstOptional(config))...)
 }
 
-func (client *ThinClient) GetTokenAccountsByOwner(owner string, filter any, config ...any) (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetTokenAccountsByOwner, optionalParams([]any{owner, filter}, firstOptional(config))...)
+func (client *ThinClient) GetTokenAccountsByOwner(ctx context.Context, owner string, filter any, config ...any) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetTokenAccountsByOwner, optionalParams([]any{owner, filter}, firstOptional(config))...)
 }
 
-func (client *ThinClient) GetTokenLargestAccounts(mint string, commitment ...types.Commitment) (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetTokenLargestAccounts, optionalParams([]any{mint}, commitmentConfig(commitment...))...)
+func (client *ThinClient) GetTokenLargestAccounts(ctx context.Context, mint string, commitment ...types.Commitment) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetTokenLargestAccounts, optionalParams([]any{mint}, commitmentConfig(commitment...))...)
 }
 
-func (client *ThinClient) GetTokenSupply(mint string, commitment ...types.Commitment) (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetTokenSupply, optionalParams([]any{mint}, commitmentConfig(commitment...))...)
+func (client *ThinClient) GetTokenSupply(ctx context.Context, mint string, commitment ...types.Commitment) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetTokenSupply, optionalParams([]any{mint}, commitmentConfig(commitment...))...)
 }
 
-func (client *ThinClient) GetFeeForMessage(message string, commitment ...types.Commitment) (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetFeeForMessage, optionalParams([]any{message}, commitmentConfig(commitment...))...)
+func (client *ThinClient) GetFeeForMessage(ctx context.Context, message string, commitment ...types.Commitment) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetFeeForMessage, optionalParams([]any{message}, commitmentConfig(commitment...))...)
 }
 
 // GetEpochInfo retrieves information about the current epoch with the specified commitment level.
 // Returns the raw JSON result containing epoch details such as absolute slot, epoch number,
 // slot index, and slots in epoch.
-func (client *ThinClient) GetEpochInfo(commitment types.Commitment) (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetEpochInfo, commitmentConfig(commitment))
+func (client *ThinClient) GetEpochInfo(ctx context.Context, commitment types.Commitment) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetEpochInfo, commitmentConfig(commitment))
 }
 
-func (client *ThinClient) GetLatestBlockhash(commitment ...types.Commitment) (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetLatestBlockhash, optionalParams(nil, commitmentConfig(commitment...))...)
+func (client *ThinClient) GetLatestBlockhash(ctx context.Context, commitment ...types.Commitment) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetLatestBlockhash, optionalParams(nil, commitmentConfig(commitment...))...)
 }
 
-func (client *ThinClient) GetRecentPrioritizationFees(accounts ...string) (types.RawResult, error) {
+func (client *ThinClient) GetRecentPrioritizationFees(ctx context.Context, accounts ...string) (types.RawResult, error) {
 	if len(accounts) == 0 {
-		return client.RawCall(RPCMethodGetRecentPrioritizationFees)
+		return client.RawCall(ctx, RPCMethodGetRecentPrioritizationFees)
 	}
-	return client.RawCall(RPCMethodGetRecentPrioritizationFees, accounts)
+	return client.RawCall(ctx, RPCMethodGetRecentPrioritizationFees, accounts)
 }
 
-func (client *ThinClient) GetSignaturesForAddress(address string, config ...any) (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetSignaturesForAddress, optionalParams([]any{address}, firstOptional(config))...)
+func (client *ThinClient) GetSignaturesForAddress(ctx context.Context, address string, config ...any) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetSignaturesForAddress, optionalParams([]any{address}, firstOptional(config))...)
 }
 
-func (client *ThinClient) GetSignatureStatuses(signatures []string, config ...any) (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetSignatureStatuses, optionalParams([]any{signatures}, firstOptional(config))...)
+func (client *ThinClient) GetSignatureStatuses(ctx context.Context, signatures []string, config ...any) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetSignatureStatuses, optionalParams([]any{signatures}, firstOptional(config))...)
 }
 
 // GetTransaction retrieves information about a confirmed transaction by its signature.
 // The signature parameter should be a base58-encoded transaction signature.
 // Returns raw JSON containing transaction details including metadata and account keys.
-func (client *ThinClient) GetTransaction(signature string, config ...any) (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetTransaction, optionalParams([]any{signature}, firstOptional(config))...)
+func (client *ThinClient) GetTransaction(ctx context.Context, signature string, config ...any) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetTransaction, optionalParams([]any{signature}, firstOptional(config))...)
 }
 
-func (client *ThinClient) GetTransactionCount(commitment ...types.Commitment) (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetTransactionCount, optionalParams(nil, commitmentConfig(commitment...))...)
+func (client *ThinClient) GetTransactionCount(ctx context.Context, commitment ...types.Commitment) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetTransactionCount, optionalParams(nil, commitmentConfig(commitment...))...)
 }
 
-func (client *ThinClient) IsBlockhashValid(blockhash string, commitment ...types.Commitment) (types.RawResult, error) {
-	return client.RawCall(RPCMethodIsBlockhashValid, optionalParams([]any{blockhash}, commitmentConfig(commitment...))...)
+func (client *ThinClient) IsBlockhashValid(ctx context.Context, blockhash string, commitment ...types.Commitment) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodIsBlockhashValid, optionalParams([]any{blockhash}, commitmentConfig(commitment...))...)
 }
 
-func (client *ThinClient) RequestAirdrop(pubkey string, lamports uint64, commitment ...types.Commitment) (types.RawResult, error) {
-	return client.RawCall(RPCMethodRequestAirdrop, optionalParams([]any{pubkey, lamports}, commitmentConfig(commitment...))...)
+func (client *ThinClient) RequestAirdrop(ctx context.Context, pubkey string, lamports uint64, commitment ...types.Commitment) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodRequestAirdrop, optionalParams([]any{pubkey, lamports}, commitmentConfig(commitment...))...)
 }
 
-func (client *ThinClient) SendTransaction(serialized []byte, config ...any) (types.RawResult, error) {
+func (client *ThinClient) SendTransaction(ctx context.Context, serialized []byte, config ...any) (types.RawResult, error) {
 	encoded := base64.StdEncoding.EncodeToString(serialized)
-	return client.SendEncodedTransaction(encoded, config...)
+	return client.SendEncodedTransaction(ctx, encoded, config...)
 }
 
-func (client *ThinClient) SendEncodedTransaction(encoded string, config ...any) (types.RawResult, error) {
-	return client.RawCall(RPCMethodSendTransaction, optionalParams([]any{encoded}, firstOptional(config))...)
+func (client *ThinClient) SendEncodedTransaction(ctx context.Context, encoded string, config ...any) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodSendTransaction, optionalParams([]any{encoded}, firstOptional(config))...)
 }
 
 // SimulateTransaction simulates sending a transaction to the cluster with the specified commitment level.
 // The serialized parameter should contain the base64-encoded transaction data.
 // Returns an error if the simulation fails or if the transaction would fail on-chain.
-func (client *ThinClient) SimulateTransaction(serialized []byte, commitment types.Commitment) error {
+func (client *ThinClient) SimulateTransaction(ctx context.Context, serialized []byte, commitment types.Commitment) error {
 	encoded := base64.StdEncoding.EncodeToString(serialized)
 
-	response, err := client.call(RPCMethodSimulateTransaction, []any{
+	response, err := client.call(ctx, RPCMethodSimulateTransaction, []any{
 		encoded,
 		map[string]string{"encoding": "base64", "commitment": commitment},
 	})
@@ -168,42 +169,42 @@ func (client *ThinClient) SimulateTransaction(serialized []byte, commitment type
 	return nil
 }
 
-func (client *ThinClient) SimulateEncodedTransaction(encoded string, config ...any) (types.RawResult, error) {
-	return client.RawCall(RPCMethodSimulateTransaction, optionalParams([]any{encoded}, firstOptional(config))...)
+func (client *ThinClient) SimulateEncodedTransaction(ctx context.Context, encoded string, config ...any) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodSimulateTransaction, optionalParams([]any{encoded}, firstOptional(config))...)
 }
 
 // GetBlock retrieves detailed information about a confirmed block at the specified slot.
 // The commitment parameter determines the level of finality required for the block data.
 // Returns raw JSON containing block details including transactions, rewards, and block metadata.
-func (client *ThinClient) GetBlock(slot types.Slot, commitment types.Commitment) (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetBlock, slot, map[string]string{"commitment": commitment})
+func (client *ThinClient) GetBlock(ctx context.Context, slot types.Slot, commitment types.Commitment) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetBlock, slot, map[string]string{"commitment": commitment})
 }
 
-func (client *ThinClient) GetBlockCommitment(slot types.Slot) (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetBlockCommitment, slot)
+func (client *ThinClient) GetBlockCommitment(ctx context.Context, slot types.Slot) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetBlockCommitment, slot)
 }
 
-func (client *ThinClient) GetBlockHeight(commitment ...types.Commitment) (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetBlockHeight, optionalParams(nil, commitmentConfig(commitment...))...)
+func (client *ThinClient) GetBlockHeight(ctx context.Context, commitment ...types.Commitment) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetBlockHeight, optionalParams(nil, commitmentConfig(commitment...))...)
 }
 
-func (client *ThinClient) GetBlockProduction(config ...any) (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetBlockProduction, optionalParams(nil, firstOptional(config))...)
+func (client *ThinClient) GetBlockProduction(ctx context.Context, config ...any) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetBlockProduction, optionalParams(nil, firstOptional(config))...)
 }
 
-func (client *ThinClient) GetBlocks(startSlot types.Slot, endSlot *types.Slot, commitment ...types.Commitment) (types.RawResult, error) {
+func (client *ThinClient) GetBlocks(ctx context.Context, startSlot types.Slot, endSlot *types.Slot, commitment ...types.Commitment) (types.RawResult, error) {
 	if endSlot == nil {
-		return client.RawCall(RPCMethodGetBlocks, optionalParams([]any{startSlot}, commitmentConfig(commitment...))...)
+		return client.RawCall(ctx, RPCMethodGetBlocks, optionalParams([]any{startSlot}, commitmentConfig(commitment...))...)
 	}
-	return client.RawCall(RPCMethodGetBlocks, optionalParams([]any{startSlot, *endSlot}, commitmentConfig(commitment...))...)
+	return client.RawCall(ctx, RPCMethodGetBlocks, optionalParams([]any{startSlot, *endSlot}, commitmentConfig(commitment...))...)
 }
 
-func (client *ThinClient) GetBlocksWithLimit(startSlot types.Slot, limit uint64, commitment ...types.Commitment) (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetBlocksWithLimit, optionalParams([]any{startSlot, limit}, commitmentConfig(commitment...))...)
+func (client *ThinClient) GetBlocksWithLimit(ctx context.Context, startSlot types.Slot, limit uint64, commitment ...types.Commitment) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetBlocksWithLimit, optionalParams([]any{startSlot, limit}, commitmentConfig(commitment...))...)
 }
 
-func (client *ThinClient) GetBlockTime(slot types.Slot) (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetBlockTime, slot)
+func (client *ThinClient) GetBlockTime(ctx context.Context, slot types.Slot) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetBlockTime, slot)
 }
 
 // GetConfirmedSlots retrieves a list of confirmed slots between the specified range.
@@ -211,8 +212,8 @@ func (client *ThinClient) GetBlockTime(slot types.Slot) (types.RawResult, error)
 // The commitment parameter determines the level of finality required for the slots.
 // Returns a slice of slot numbers that have been confirmed in the specified range.
 // Note: The range is limited by the RPC node's slot retention policy.
-func (client *ThinClient) GetConfirmedSlots(from, to types.Slot, commitment types.Commitment) (types.ConfirmedSlots, error) {
-	response, err := client.call(RPCMethodGetBlocks, []any{
+func (client *ThinClient) GetConfirmedSlots(ctx context.Context, from, to types.Slot, commitment types.Commitment) (types.ConfirmedSlots, error) {
+	response, err := client.call(ctx, RPCMethodGetBlocks, []any{
 		from,
 		to,
 		map[string]string{"commitment": commitment},
@@ -230,60 +231,60 @@ func (client *ThinClient) GetConfirmedSlots(from, to types.Slot, commitment type
 	return slots, nil
 }
 
-func (client *ThinClient) GetFirstAvailableBlock() (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetFirstAvailableBlock)
+func (client *ThinClient) GetFirstAvailableBlock(ctx context.Context) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetFirstAvailableBlock)
 }
 
-func (client *ThinClient) GetRecentPerformanceSamples(limit ...uint64) (types.RawResult, error) {
+func (client *ThinClient) GetRecentPerformanceSamples(ctx context.Context, limit ...uint64) (types.RawResult, error) {
 	if len(limit) == 0 {
-		return client.RawCall(RPCMethodGetRecentPerformanceSamples)
+		return client.RawCall(ctx, RPCMethodGetRecentPerformanceSamples)
 	}
-	return client.RawCall(RPCMethodGetRecentPerformanceSamples, limit[0])
+	return client.RawCall(ctx, RPCMethodGetRecentPerformanceSamples, limit[0])
 }
 
-func (client *ThinClient) MinimumLedgerSlot() (types.RawResult, error) {
-	return client.RawCall(RPCMethodMinimumLedgerSlot)
+func (client *ThinClient) MinimumLedgerSlot(ctx context.Context) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodMinimumLedgerSlot)
 }
 
-func (client *ThinClient) GetEpochSchedule() (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetEpochSchedule)
+func (client *ThinClient) GetEpochSchedule(ctx context.Context) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetEpochSchedule)
 }
 
-func (client *ThinClient) GetGenesisHash() (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetGenesisHash)
+func (client *ThinClient) GetGenesisHash(ctx context.Context) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetGenesisHash)
 }
 
-func (client *ThinClient) GetHealth() (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetHealth)
+func (client *ThinClient) GetHealth(ctx context.Context) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetHealth)
 }
 
-func (client *ThinClient) GetHighestSnapshotSlot() (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetHighestSnapshotSlot)
+func (client *ThinClient) GetHighestSnapshotSlot(ctx context.Context) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetHighestSnapshotSlot)
 }
 
-func (client *ThinClient) GetIdentity() (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetIdentity)
+func (client *ThinClient) GetIdentity(ctx context.Context) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetIdentity)
 }
 
-func (client *ThinClient) GetLeaderSchedule(slot *types.Slot, config ...any) (types.RawResult, error) {
+func (client *ThinClient) GetLeaderSchedule(ctx context.Context, slot *types.Slot, config ...any) (types.RawResult, error) {
 	if slot == nil {
-		return client.RawCall(RPCMethodGetLeaderSchedule, optionalParams(nil, firstOptional(config))...)
+		return client.RawCall(ctx, RPCMethodGetLeaderSchedule, optionalParams(nil, firstOptional(config))...)
 	}
-	return client.RawCall(RPCMethodGetLeaderSchedule, optionalParams([]any{*slot}, firstOptional(config))...)
+	return client.RawCall(ctx, RPCMethodGetLeaderSchedule, optionalParams([]any{*slot}, firstOptional(config))...)
 }
 
-func (client *ThinClient) GetMaxRetransmitSlot() (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetMaxRetransmitSlot)
+func (client *ThinClient) GetMaxRetransmitSlot(ctx context.Context) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetMaxRetransmitSlot)
 }
 
-func (client *ThinClient) GetMaxShredInsertSlot() (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetMaxShredInsertSlot)
+func (client *ThinClient) GetMaxShredInsertSlot(ctx context.Context) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetMaxShredInsertSlot)
 }
 
 // GetSlot retrieves the current slot number with the specified commitment level.
 // Returns the slot as a uint64 value.
-func (client *ThinClient) GetSlot(commitment types.Commitment) (types.Slot, error) {
-	response, err := client.call(RPCMethodGetSlot, []any{
+func (client *ThinClient) GetSlot(ctx context.Context, commitment types.Commitment) (types.Slot, error) {
+	response, err := client.call(ctx, RPCMethodGetSlot, []any{
 		map[string]string{"commitment": commitment},
 	})
 
@@ -295,15 +296,15 @@ func (client *ThinClient) GetSlot(commitment types.Commitment) (types.Slot, erro
 	return value, err
 }
 
-func (client *ThinClient) GetSlotLeader(commitment ...types.Commitment) (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetSlotLeader, optionalParams(nil, commitmentConfig(commitment...))...)
+func (client *ThinClient) GetSlotLeader(ctx context.Context, commitment ...types.Commitment) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetSlotLeader, optionalParams(nil, commitmentConfig(commitment...))...)
 }
 
 // GetSlotLeaders retrieves the slot leaders (validator public keys) starting from the specified slot.
 // The limit parameter specifies the maximum number of slot leaders to return (up to 5000).
 // Returns a slice of validator public keys as base58-encoded strings.
-func (client *ThinClient) GetSlotLeaders(from types.Slot, limit uint16) (types.SlotLeaders, error) {
-	response, err := client.call(RPCMethodGetSlotLeaders, []any{from, limit})
+func (client *ThinClient) GetSlotLeaders(ctx context.Context, from types.Slot, limit uint16) (types.SlotLeaders, error) {
+	response, err := client.call(ctx, RPCMethodGetSlotLeaders, []any{from, limit})
 
 	if err != nil {
 		return nil, err
@@ -335,40 +336,40 @@ func (client *ThinClient) GetSlotLeaders(from types.Slot, limit uint16) (types.S
 	return leaders, err
 }
 
-func (client *ThinClient) GetVersion() (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetVersion)
+func (client *ThinClient) GetVersion(ctx context.Context) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetVersion)
 }
 
 // GetClusterNodes retrieves information about all the nodes participating in the cluster.
 // Returns raw JSON containing node details including public keys and network addresses.
-func (client *ThinClient) GetClusterNodes() (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetClusterNodes)
+func (client *ThinClient) GetClusterNodes(ctx context.Context) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetClusterNodes)
 }
 
 // GetVoteAccounts retrieves information about all vote accounts in the cluster.
 // Returns raw JSON containing details about current and delinquent vote accounts.
-func (client *ThinClient) GetVoteAccounts() (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetVoteAccounts)
+func (client *ThinClient) GetVoteAccounts(ctx context.Context) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetVoteAccounts)
 }
 
-func (client *ThinClient) GetInflationGovernor(commitment ...types.Commitment) (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetInflationGovernor, optionalParams(nil, commitmentConfig(commitment...))...)
+func (client *ThinClient) GetInflationGovernor(ctx context.Context, commitment ...types.Commitment) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetInflationGovernor, optionalParams(nil, commitmentConfig(commitment...))...)
 }
 
-func (client *ThinClient) GetInflationRate() (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetInflationRate)
+func (client *ThinClient) GetInflationRate(ctx context.Context) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetInflationRate)
 }
 
-func (client *ThinClient) GetInflationReward(addresses []string, config ...any) (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetInflationReward, optionalParams([]any{addresses}, firstOptional(config))...)
+func (client *ThinClient) GetInflationReward(ctx context.Context, addresses []string, config ...any) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetInflationReward, optionalParams([]any{addresses}, firstOptional(config))...)
 }
 
-func (client *ThinClient) GetStakeMinimumDelegation(commitment ...types.Commitment) (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetStakeMinimumDelegation, optionalParams(nil, commitmentConfig(commitment...))...)
+func (client *ThinClient) GetStakeMinimumDelegation(ctx context.Context, commitment ...types.Commitment) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetStakeMinimumDelegation, optionalParams(nil, commitmentConfig(commitment...))...)
 }
 
-func (client *ThinClient) GetSupply(config ...any) (types.RawResult, error) {
-	return client.RawCall(RPCMethodGetSupply, optionalParams(nil, firstOptional(config))...)
+func (client *ThinClient) GetSupply(ctx context.Context, config ...any) (types.RawResult, error) {
+	return client.RawCall(ctx, RPCMethodGetSupply, optionalParams(nil, firstOptional(config))...)
 }
 
 func commitmentConfig(commitment ...types.Commitment) any {

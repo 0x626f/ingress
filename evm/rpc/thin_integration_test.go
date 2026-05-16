@@ -22,6 +22,7 @@
 package rpc
 
 import (
+	"context"
 	"os"
 	"strconv"
 	"strings"
@@ -308,7 +309,7 @@ func firstTxHashFromBlock(result []byte) string {
 
 func currentBlockHex(t *testing.T, c *ThinClient) string {
 	t.Helper()
-	result, err := c.BlockNumber()
+	result, err := c.BlockNumber(context.Background())
 	requireRPC(t, "BlockNumber (prerequisite)", err)
 	return string(result)
 }
@@ -329,7 +330,7 @@ func resolvedBlockHash(t *testing.T, c *ThinClient, chain *chainConfig) string {
 	if h := chain.blockHash(); h != "" {
 		return h
 	}
-	result, err := c.GetBlockByNumber(BlockQuery{Number: "1"})
+	result, err := c.GetBlockByNumber(context.Background(), BlockQuery{Number: "1"})
 	requireRPC(t, "GetBlockByNumber(1) for hash derivation", err)
 	h := extractStringField(result, "hash")
 	if h == "" {
@@ -350,7 +351,7 @@ func resolvedTxHash(t *testing.T, c *ThinClient, chain *chainConfig) string {
 	curHex := currentBlockHex(t, c)
 	for i := uint64(0); i < 3; i++ {
 		blockTag := hexBlockMinus(curHex, i)
-		result, err := c.GetBlockByNumber(BlockQuery{
+		result, err := c.GetBlockByNumber(context.Background(), BlockQuery{
 			OnBlockQuery:     OnBlockQuery{BlockTag: blockTag},
 			FullTransactions: true,
 		})
@@ -371,7 +372,7 @@ func resolvedTxHash(t *testing.T, c *ThinClient, chain *chainConfig) string {
 
 func TestIntegration_ChainId(t *testing.T) {
 	forEachHTTPChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
-		result, err := c.ChainId()
+		result, err := c.ChainId(context.Background())
 		requireRPC(t, "ChainId", err)
 		assertHex(t, "ChainId", result)
 		want := "0x" + strconv.FormatInt(int64(chain.ChainID), 16)
@@ -384,7 +385,7 @@ func TestIntegration_ChainId(t *testing.T) {
 
 func TestIntegration_BlockNumber(t *testing.T) {
 	forEachHTTPChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
-		result, err := c.BlockNumber()
+		result, err := c.BlockNumber(context.Background())
 		requireRPC(t, "BlockNumber", err)
 		assertHex(t, "BlockNumber", result)
 		t.Logf("BlockNumber: %s", result)
@@ -394,7 +395,7 @@ func TestIntegration_BlockNumber(t *testing.T) {
 func TestIntegration_GetBalance(t *testing.T) {
 	forEachHTTPChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
 		addr := chain.address()
-		result, err := c.GetBalance(BalanceQuery{AddressedQuery: AddressedQuery{Address: addr}})
+		result, err := c.GetBalance(context.Background(), BalanceQuery{AddressedQuery: AddressedQuery{Address: addr}})
 		requireRPC(t, "GetBalance", err)
 		assertHex(t, "GetBalance", result)
 		t.Logf("GetBalance(%s): %s", addr, result)
@@ -404,7 +405,7 @@ func TestIntegration_GetBalance(t *testing.T) {
 func TestIntegration_GetBalance_AtFinalizedBlock(t *testing.T) {
 	forEachHTTPChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
 		addr := chain.address()
-		result, err := c.GetBalance(BalanceQuery{AddressedQuery: AddressedQuery{
+		result, err := c.GetBalance(context.Background(), BalanceQuery{AddressedQuery: AddressedQuery{
 			OnBlockQuery: OnBlockQuery{BlockTag: BlockTagFinalized},
 			Address:      addr,
 		}})
@@ -421,7 +422,7 @@ func TestIntegration_GetBalance_AtFinalizedBlock(t *testing.T) {
 func TestIntegration_GetCode_Contract(t *testing.T) {
 	forEachHTTPChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
 		contract := chain.contract()
-		result, err := c.GetCode(CodeQuery{AddressedQuery: AddressedQuery{Address: contract}})
+		result, err := c.GetCode(context.Background(), CodeQuery{AddressedQuery: AddressedQuery{Address: contract}})
 		requireRPC(t, "GetCode", err)
 		assertHex(t, "GetCode", result)
 		if string(result) == "0x" {
@@ -436,7 +437,7 @@ func TestIntegration_GetCode_Contract(t *testing.T) {
 func TestIntegration_GetTransactionCount(t *testing.T) {
 	forEachHTTPChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
 		addr := chain.address()
-		result, err := c.GetTransactionCount(AddressedQuery{Address: addr})
+		result, err := c.GetTransactionCount(context.Background(), AddressedQuery{Address: addr})
 		requireRPC(t, "GetTransactionCount", err)
 		assertHex(t, "GetTransactionCount", result)
 		t.Logf("GetTransactionCount(%s): %s", addr, result)
@@ -448,7 +449,7 @@ func TestIntegration_Call_ERC20BalanceOf(t *testing.T) {
 		contract := chain.contract()
 		addr := strings.TrimPrefix(chain.address(), "0x")
 		data := "0x70a08231" + strings.Repeat("0", 24) + strings.ToLower(addr)
-		result, err := c.Call(CallQuery{To: contract, Data: data})
+		result, err := c.Call(context.Background(), CallQuery{To: contract, Data: data})
 		requireRPC(t, "Call(balanceOf)", err)
 		assertHex(t, "Call(balanceOf)", result)
 		t.Logf("balanceOf(%s) on %s: %s", addr, contract, result)
@@ -458,7 +459,7 @@ func TestIntegration_Call_ERC20BalanceOf(t *testing.T) {
 func TestIntegration_EstimateGas_SimpleTransfer(t *testing.T) {
 	forEachHTTPChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
 		addr := chain.address()
-		result, err := c.EstimateGas(EstimateGasQuery{To: addr})
+		result, err := c.EstimateGas(context.Background(), EstimateGasQuery{To: addr})
 		requireRPC(t, "EstimateGas", err)
 		assertHex(t, "EstimateGas", result)
 		// Plain ETH transfer costs 21000 gas (0x5208) on all EVM chains.
@@ -474,7 +475,7 @@ func TestIntegration_EstimateGas_ContractCall(t *testing.T) {
 		contract := chain.contract()
 		addr := strings.TrimPrefix(chain.address(), "0x")
 		data := "0x70a08231" + strings.Repeat("0", 24) + strings.ToLower(addr)
-		result, err := c.EstimateGas(EstimateGasQuery{To: contract, Data: data})
+		result, err := c.EstimateGas(context.Background(), EstimateGasQuery{To: contract, Data: data})
 		requireRPC(t, "EstimateGas(contract)", err)
 		assertHex(t, "EstimateGas(contract)", result)
 		t.Logf("EstimateGas(balanceOf on %s): %s", contract, result)
@@ -484,7 +485,7 @@ func TestIntegration_EstimateGas_ContractCall(t *testing.T) {
 func TestIntegration_GetTransactionByHash(t *testing.T) {
 	forEachHTTPChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
 		txHash := resolvedTxHash(t, c, chain)
-		result, err := c.GetTransactionByHash(TransactionQuery{Hash: txHash})
+		result, err := c.GetTransactionByHash(context.Background(), TransactionQuery{Hash: txHash})
 		requireRPC(t, "GetTransactionByHash", err)
 		assertNonEmpty(t, "GetTransactionByHash", result)
 		t.Logf("GetTransactionByHash(%s): %d bytes", txHash, len(result))
@@ -494,7 +495,7 @@ func TestIntegration_GetTransactionByHash(t *testing.T) {
 func TestIntegration_GetTransactionReceipt(t *testing.T) {
 	forEachHTTPChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
 		txHash := resolvedTxHash(t, c, chain)
-		result, err := c.GetTransactionReceipt(TransactionQuery{Hash: txHash})
+		result, err := c.GetTransactionReceipt(context.Background(), TransactionQuery{Hash: txHash})
 		requireRPC(t, "GetTransactionReceipt", err)
 		assertNonEmpty(t, "GetTransactionReceipt", result)
 		t.Logf("GetTransactionReceipt(%s): %d bytes", txHash, len(result))
@@ -503,7 +504,7 @@ func TestIntegration_GetTransactionReceipt(t *testing.T) {
 
 func TestIntegration_SendRawTransaction_RejectsInvalidTx(t *testing.T) {
 	forEachHTTPChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
-		_, err := c.SendRawTransaction(TransactionQuery{Signed: "0xdeadbeef"})
+		_, err := c.SendRawTransaction(context.Background(), TransactionQuery{Signed: "0xdeadbeef"})
 		if err == nil {
 			t.Error("expected RPC error for malformed signed transaction")
 		}
@@ -513,7 +514,7 @@ func TestIntegration_SendRawTransaction_RejectsInvalidTx(t *testing.T) {
 
 func TestIntegration_GetBlockByNumber_Latest(t *testing.T) {
 	forEachHTTPChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
-		result, err := c.GetBlockByNumber(BlockQuery{})
+		result, err := c.GetBlockByNumber(context.Background(), BlockQuery{})
 		requireRPC(t, "GetBlockByNumber(latest)", err)
 		assertNonEmpty(t, "GetBlockByNumber(latest)", result)
 		t.Logf("GetBlockByNumber(latest): %d bytes", len(result))
@@ -522,7 +523,7 @@ func TestIntegration_GetBlockByNumber_Latest(t *testing.T) {
 
 func TestIntegration_GetBlockByNumber_ByNumber(t *testing.T) {
 	forEachHTTPChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
-		result, err := c.GetBlockByNumber(BlockQuery{Number: "1"})
+		result, err := c.GetBlockByNumber(context.Background(), BlockQuery{Number: "1"})
 		requireRPC(t, "GetBlockByNumber(1)", err)
 		assertNonEmpty(t, "GetBlockByNumber(1)", result)
 		t.Logf("GetBlockByNumber(1): %d bytes", len(result))
@@ -531,7 +532,7 @@ func TestIntegration_GetBlockByNumber_ByNumber(t *testing.T) {
 
 func TestIntegration_GetBlockByNumber_FullTransactions(t *testing.T) {
 	forEachHTTPChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
-		result, err := c.GetBlockByNumber(BlockQuery{FullTransactions: true})
+		result, err := c.GetBlockByNumber(context.Background(), BlockQuery{FullTransactions: true})
 		requireRPC(t, "GetBlockByNumber(fullTx)", err)
 		assertNonEmpty(t, "GetBlockByNumber(fullTx)", result)
 		t.Logf("GetBlockByNumber(latest, fullTx): %d bytes", len(result))
@@ -540,7 +541,7 @@ func TestIntegration_GetBlockByNumber_FullTransactions(t *testing.T) {
 
 func TestIntegration_GetBlockByNumber_Finalized(t *testing.T) {
 	forEachHTTPChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
-		result, err := c.GetBlockByNumber(BlockQuery{
+		result, err := c.GetBlockByNumber(context.Background(), BlockQuery{
 			OnBlockQuery: OnBlockQuery{BlockTag: BlockTagFinalized},
 		})
 		if err != nil {
@@ -555,7 +556,7 @@ func TestIntegration_GetBlockByNumber_Finalized(t *testing.T) {
 func TestIntegration_GetBlockByHash(t *testing.T) {
 	forEachHTTPChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
 		blockHash := resolvedBlockHash(t, c, chain)
-		result, err := c.GetBlockByHash(BlockQuery{Hash: blockHash})
+		result, err := c.GetBlockByHash(context.Background(), BlockQuery{Hash: blockHash})
 		requireRPC(t, "GetBlockByHash", err)
 		assertNonEmpty(t, "GetBlockByHash", result)
 		t.Logf("GetBlockByHash(%s): %d bytes", blockHash, len(result))
@@ -568,7 +569,7 @@ func TestIntegration_GetLogs(t *testing.T) {
 		// GetLogs legitimately returns [] when no events match.
 		// ParseResponse strips the outer [] leaving zero bytes, so assertNonEmpty
 		// must not be used here — zero bytes is a valid "no logs" result.
-		_, err := c.GetLogs(LogsQuery{
+		_, err := c.GetLogs(context.Background(), LogsQuery{
 			AddressedQuery: AddressedQuery{Address: chain.contract()},
 			FromBlock:      block,
 			ToBlock:        block,
@@ -581,7 +582,7 @@ func TestIntegration_GetLogs(t *testing.T) {
 func TestIntegration_GetLogs_DefaultToBlock(t *testing.T) {
 	forEachHTTPChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
 		fromBlock := hexBlockMinus(currentBlockHex(t, c), 5)
-		_, err := c.GetLogs(LogsQuery{
+		_, err := c.GetLogs(context.Background(), LogsQuery{
 			AddressedQuery: AddressedQuery{Address: chain.contract()},
 			FromBlock:      fromBlock,
 		})
@@ -603,7 +604,7 @@ func TestIntegration_MultipleResources_Pooled(t *testing.T) {
 		if err != nil {
 			t.Fatalf("NewRawClient: %v", err)
 		}
-		result, err := c.HTTP().BlockNumber()
+		result, err := c.HTTP().BlockNumber(context.Background())
 		if err != nil {
 			t.Fatalf("BlockNumber (pooled): %v", err)
 		}
@@ -620,7 +621,7 @@ func TestIntegration_DeadResourceFallback(t *testing.T) {
 		if err != nil {
 			t.Fatalf("NewRawClient: %v", err)
 		}
-		result, err := c.HTTP().BlockNumber()
+		result, err := c.HTTP().BlockNumber(context.Background())
 		if err != nil {
 			t.Fatalf("BlockNumber (after dead resource): %v", err)
 		}
@@ -634,7 +635,7 @@ func TestIntegration_DeadResourceFallback(t *testing.T) {
 
 func TestIntegrationWS_ChainId(t *testing.T) {
 	forEachWSChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
-		result, err := c.ChainId()
+		result, err := c.ChainId(context.Background())
 		requireRPC(t, "WS ChainId", err)
 		assertHex(t, "WS ChainId", result)
 		want := "0x" + strconv.FormatInt(int64(chain.ChainID), 16)
@@ -647,7 +648,7 @@ func TestIntegrationWS_ChainId(t *testing.T) {
 
 func TestIntegrationWS_BlockNumber(t *testing.T) {
 	forEachWSChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
-		result, err := c.BlockNumber()
+		result, err := c.BlockNumber(context.Background())
 		requireRPC(t, "WS BlockNumber", err)
 		assertHex(t, "WS BlockNumber", result)
 		t.Logf("WS BlockNumber: %s", result)
@@ -657,7 +658,7 @@ func TestIntegrationWS_BlockNumber(t *testing.T) {
 func TestIntegrationWS_GetBalance(t *testing.T) {
 	forEachWSChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
 		addr := chain.address()
-		result, err := c.GetBalance(BalanceQuery{AddressedQuery: AddressedQuery{Address: addr}})
+		result, err := c.GetBalance(context.Background(), BalanceQuery{AddressedQuery: AddressedQuery{Address: addr}})
 		requireRPC(t, "WS GetBalance", err)
 		assertHex(t, "WS GetBalance", result)
 		t.Logf("WS GetBalance(%s): %s", addr, result)
@@ -667,7 +668,7 @@ func TestIntegrationWS_GetBalance(t *testing.T) {
 func TestIntegrationWS_GetCode_Contract(t *testing.T) {
 	forEachWSChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
 		contract := chain.contract()
-		result, err := c.GetCode(CodeQuery{AddressedQuery: AddressedQuery{Address: contract}})
+		result, err := c.GetCode(context.Background(), CodeQuery{AddressedQuery: AddressedQuery{Address: contract}})
 		requireRPC(t, "GetCode", err)
 		assertHex(t, "WS GetCode", result)
 		if string(result) == "0x" {
@@ -682,7 +683,7 @@ func TestIntegrationWS_GetCode_Contract(t *testing.T) {
 func TestIntegrationWS_GetTransactionCount(t *testing.T) {
 	forEachWSChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
 		addr := chain.address()
-		result, err := c.GetTransactionCount(AddressedQuery{Address: addr})
+		result, err := c.GetTransactionCount(context.Background(), AddressedQuery{Address: addr})
 		requireRPC(t, "WS GetTransactionCount", err)
 		assertHex(t, "WS GetTransactionCount", result)
 		t.Logf("WS GetTransactionCount(%s): %s", addr, result)
@@ -694,7 +695,7 @@ func TestIntegrationWS_Call_ERC20BalanceOf(t *testing.T) {
 		contract := chain.contract()
 		addr := strings.TrimPrefix(chain.address(), "0x")
 		data := "0x70a08231" + strings.Repeat("0", 24) + strings.ToLower(addr)
-		result, err := c.Call(CallQuery{To: contract, Data: data})
+		result, err := c.Call(context.Background(), CallQuery{To: contract, Data: data})
 		requireRPC(t, "WS Call(balanceOf)", err)
 		assertHex(t, "WS Call(balanceOf)", result)
 		t.Logf("WS balanceOf(%s) on %s: %s", addr, contract, result)
@@ -704,7 +705,7 @@ func TestIntegrationWS_Call_ERC20BalanceOf(t *testing.T) {
 func TestIntegrationWS_GetTransactionByHash(t *testing.T) {
 	forEachWSChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
 		txHash := resolvedTxHash(t, c, chain)
-		result, err := c.GetTransactionByHash(TransactionQuery{Hash: txHash})
+		result, err := c.GetTransactionByHash(context.Background(), TransactionQuery{Hash: txHash})
 		requireRPC(t, "WS GetTransactionByHash", err)
 		assertNonEmpty(t, "WS GetTransactionByHash", result)
 		t.Logf("WS GetTransactionByHash(%s): %d bytes", txHash, len(result))
@@ -714,7 +715,7 @@ func TestIntegrationWS_GetTransactionByHash(t *testing.T) {
 func TestIntegrationWS_GetTransactionReceipt(t *testing.T) {
 	forEachWSChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
 		txHash := resolvedTxHash(t, c, chain)
-		result, err := c.GetTransactionReceipt(TransactionQuery{Hash: txHash})
+		result, err := c.GetTransactionReceipt(context.Background(), TransactionQuery{Hash: txHash})
 		requireRPC(t, "WS GetTransactionReceipt", err)
 		assertNonEmpty(t, "WS GetTransactionReceipt", result)
 		t.Logf("WS GetTransactionReceipt(%s): %d bytes", txHash, len(result))
@@ -723,7 +724,7 @@ func TestIntegrationWS_GetTransactionReceipt(t *testing.T) {
 
 func TestIntegrationWS_GetBlockByNumber_Latest(t *testing.T) {
 	forEachWSChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
-		result, err := c.GetBlockByNumber(BlockQuery{})
+		result, err := c.GetBlockByNumber(context.Background(), BlockQuery{})
 		requireRPC(t, "WS GetBlockByNumber(latest)", err)
 		assertNonEmpty(t, "WS GetBlockByNumber(latest)", result)
 		t.Logf("WS GetBlockByNumber(latest): %d bytes", len(result))
@@ -733,7 +734,7 @@ func TestIntegrationWS_GetBlockByNumber_Latest(t *testing.T) {
 func TestIntegrationWS_GetBlockByHash(t *testing.T) {
 	forEachWSChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
 		blockHash := resolvedBlockHash(t, c, chain)
-		result, err := c.GetBlockByHash(BlockQuery{Hash: blockHash})
+		result, err := c.GetBlockByHash(context.Background(), BlockQuery{Hash: blockHash})
 		requireRPC(t, "WS GetBlockByHash", err)
 		assertNonEmpty(t, "WS GetBlockByHash", result)
 		t.Logf("WS GetBlockByHash(%s): %d bytes", blockHash, len(result))
@@ -744,7 +745,7 @@ func TestIntegrationWS_GetLogs(t *testing.T) {
 	forEachWSChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
 		block := hexBlockMinus(currentBlockHex(t, c), 5)
 		// Empty [] is a valid response; do not use assertNonEmpty (see HTTP variant).
-		_, err := c.GetLogs(LogsQuery{
+		_, err := c.GetLogs(context.Background(), LogsQuery{
 			AddressedQuery: AddressedQuery{Address: chain.contract()},
 			FromBlock:      block,
 			ToBlock:        block,
@@ -756,11 +757,11 @@ func TestIntegrationWS_GetLogs(t *testing.T) {
 
 func TestIntegrationWS_SequentialCalls_SharedConnection(t *testing.T) {
 	forEachWSChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
-		r1, err := c.ChainId()
+		r1, err := c.ChainId(context.Background())
 		requireRPC(t, "WS ChainId (1st)", err)
-		r2, err := c.BlockNumber()
+		r2, err := c.BlockNumber(context.Background())
 		requireRPC(t, "WS BlockNumber", err)
-		r3, err := c.ChainId()
+		r3, err := c.ChainId(context.Background())
 		requireRPC(t, "WS ChainId (2nd)", err)
 
 		assertHex(t, "WS ChainId (1st)", r1)
@@ -781,10 +782,10 @@ func TestIntegrationWS_SequentialCalls_SharedConnection(t *testing.T) {
 func TestIntegrationWS_Stress_SequentialHighVolume(t *testing.T) {
 	const n = 50
 	forEachWSChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
-		chainID, err := c.ChainId()
+		chainID, err := c.ChainId(context.Background())
 		requireRPC(t, "initial ChainId", err)
 		for i := 0; i < n; i++ {
-			result, err := c.ChainId()
+			result, err := c.ChainId(context.Background())
 			requireRPC(t, "ChainId", err)
 			if string(result) != string(chainID) {
 				t.Errorf("call %d: chainId changed: want %s got %s", i, chainID, result)
@@ -809,7 +810,7 @@ func TestIntegrationWS_Stress_ConcurrentSameMethod(t *testing.T) {
 			go func(id int) {
 				defer wg.Done()
 				for i := 0; i < callsEach; i++ {
-					result, err := c.ChainId()
+					result, err := c.ChainId(context.Background())
 					if err != nil {
 						t.Errorf("goroutine %d call %d: %v", id, i, err)
 						errCount.Add(1)
@@ -841,16 +842,16 @@ func TestIntegrationWS_Stress_ConcurrentMixedMethods(t *testing.T) {
 			fn   func() ([]byte, error)
 		}
 		jobs := []job{
-			{"ChainId", func() ([]byte, error) { return c.ChainId() }},
-			{"BlockNumber", func() ([]byte, error) { return c.BlockNumber() }},
+			{"ChainId", func() ([]byte, error) { return c.ChainId(context.Background()) }},
+			{"BlockNumber", func() ([]byte, error) { return c.BlockNumber(context.Background()) }},
 			{"GetBalance", func() ([]byte, error) {
-				return c.GetBalance(BalanceQuery{AddressedQuery: AddressedQuery{Address: addr}})
+				return c.GetBalance(context.Background(), BalanceQuery{AddressedQuery: AddressedQuery{Address: addr}})
 			}},
 			{"GetCode", func() ([]byte, error) {
-				return c.GetCode(CodeQuery{AddressedQuery: AddressedQuery{Address: contract}})
+				return c.GetCode(context.Background(), CodeQuery{AddressedQuery: AddressedQuery{Address: contract}})
 			}},
 			{"GetTransactionCount", func() ([]byte, error) {
-				return c.GetTransactionCount(AddressedQuery{Address: addr})
+				return c.GetTransactionCount(context.Background(), AddressedQuery{Address: addr})
 			}},
 		}
 
@@ -879,7 +880,7 @@ func TestIntegrationWS_Stress_ConcurrentMixedMethods(t *testing.T) {
 
 func TestIntegrationWS_Subscribe_NewHeads(t *testing.T) {
 	forEachWSChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
-		sub, listener, err := c.Subscribe(SubscribeQuery{On: "newHeads"})
+		sub, listener, err := c.Subscribe(context.Background(), SubscribeQuery{On: "newHeads"})
 		if err != nil {
 			t.Fatalf("Subscribe(newHeads): %v", err)
 		}
@@ -896,7 +897,7 @@ func TestIntegrationWS_Subscribe_NewHeads(t *testing.T) {
 			t.Skip("no newHeads event within 30s — chain may be slow or paused")
 		}
 
-		result, err := c.UnSubscribe(UnSubscribeQuery{Subscription: sub})
+		result, err := c.UnSubscribe(context.Background(), UnSubscribeQuery{Subscription: sub})
 		if err != nil {
 			t.Fatalf("UnSubscribe: %v", err)
 		}

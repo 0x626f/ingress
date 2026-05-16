@@ -62,7 +62,7 @@ type Connection interface {
 	// Send serializes and dispatches a JSON-RPC request.
 	// For HTTP it returns the response body directly.
 	// For WebSocket it returns nil and the response arrives on Stream.
-	Send([]byte) ([]byte, error)
+	Send(context.Context, []byte) ([]byte, error)
 	// Timeout returns the per-request deadline configured for this connection.
 	Timeout() time.Duration
 	// Stream returns the channel on which incoming WebSocket messages are delivered.
@@ -87,7 +87,11 @@ func (manager *ConnectionManager) AddConnection(conn Connection) *ConnectionMana
 // Send dispatches data to the first available connection in the pool.
 // It returns the raw response bytes (HTTP only), the connection's event stream
 // (WebSocket only), the configured timeout, and any transport error.
-func (manager *ConnectionManager) Send(data []byte) (result []byte, stream RStream, timeout time.Duration, err error) {
+func (manager *ConnectionManager) Send(ctx context.Context, data []byte) (result []byte, stream RStream, timeout time.Duration, err error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	manager.mu.Lock()
 	defer manager.mu.Unlock()
 
@@ -99,7 +103,7 @@ func (manager *ConnectionManager) Send(data []byte) (result []byte, stream RStre
 	for index := manager.active; index < len(manager.connections); index++ {
 		manager.active = index
 
-		result, err = manager.connections[index].Send(data)
+		result, err = manager.connections[index].Send(ctx, data)
 		if err == nil {
 			stream = manager.connections[index].Stream()
 			timeout = manager.connections[index].Timeout()
@@ -201,8 +205,18 @@ func newHttpConnection(params ConnectionParams) *HttpConnection {
 }
 
 // Send posts payload as a JSON-RPC request and returns the raw response body.
-func (connection *HttpConnection) Send(payload []byte) (result []byte, err error) {
-	response, err := connection.client().Post(connection.resource, "application/json", bytes.NewBuffer(payload))
+func (connection *HttpConnection) Send(ctx context.Context, payload []byte) (result []byte, err error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, connection.resource, bytes.NewBuffer(payload))
+	if err != nil {
+		return nil, err
+	}
+	request.Header.Set("Content-Type", "application/json")
+
+	response, err := connection.client().Do(request)
 	if err != nil {
 		return nil, err
 	}
@@ -255,7 +269,11 @@ func newWsConnection(params ConnectionParams) *WsConnection {
 	}
 }
 
-func (connection *WsConnection) connect() error {
+func (connection *WsConnection) connect(ctx context.Context) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
 	connection.connMu.Lock()
 	defer connection.connMu.Unlock()
 
@@ -263,10 +281,9 @@ func (connection *WsConnection) connect() error {
 		return nil
 	}
 
-	ctx := context.Background()
 	if connection.timeout > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(context.Background(), connection.timeout)
+		ctx, cancel = context.WithTimeout(ctx, connection.timeout)
 		defer cancel()
 	}
 
@@ -372,8 +389,8 @@ func (connection *WsConnection) closeConn(expected net.Conn) {
 // Send writes payload to the WebSocket connection, lazily establishing the
 // connection on the first call. The response is not returned here; it arrives
 // asynchronously on the channel returned by Stream.
-func (connection *WsConnection) Send(payload []byte) ([]byte, error) {
-	if err := connection.connect(); err != nil {
+func (connection *WsConnection) Send(ctx context.Context, payload []byte) ([]byte, error) {
+	if err := connection.connect(ctx); err != nil {
 		return nil, err
 	}
 
