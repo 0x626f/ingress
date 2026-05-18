@@ -436,11 +436,22 @@ func (client *ThinClient) GetBlockByHash(ctx context.Context, query BlockQuery) 
 
 // GetLogs calls eth_getLogs.
 func (client *ThinClient) GetLogs(ctx context.Context, query LogsQuery) ([]byte, error) {
-	rpcCallData := map[string]any{
-		"fromBlock": query.FromBlock,
-		"toBlock":   getOrDefault(BlockTagLatest, query.ToBlock),
-		"address":   query.Address,
-		"topics":    query.Topics,
+	rpcCallData := map[string]any{}
+
+	if query.FromBlock != "" {
+		rpcCallData["fromBlock"] = query.FromBlock
+	}
+
+	if query.ToBlock != "" {
+		rpcCallData["toBlock"] = query.ToBlock
+	}
+
+	if query.Address != "" {
+		rpcCallData["address"] = query.Address
+	}
+
+	if len(query.Topics) != 0 {
+		rpcCallData["topics"] = query.Topics
 	}
 
 	return omitStream(client.handle(ctx,
