@@ -122,7 +122,7 @@ func (client *RawClient) WS() *ThinClient {
 }
 
 // HasResourceByProtocol reports whether the RawClient has resources for kind.
-func (client *RawClient) HasResourceByProtocol(kind transport.ConnectionKind) bool {
+func (client *RawClient) HasResourceByProtocol(kind transport.Protocol) bool {
 	if client == nil {
 		return false
 	}

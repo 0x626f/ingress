@@ -156,7 +156,7 @@ type stubConn struct {
 	err      error
 }
 
-func (s *stubConn) Kind() ConnectionKind                         { return HTTP }
+func (s *stubConn) Kind() Protocol                               { return HTTP }
 func (s *stubConn) Resource() string                             { return "" }
 func (s *stubConn) Timeout() time.Duration                       { return 0 }
 func (s *stubConn) Stream() <-chan Message                       { return nil }

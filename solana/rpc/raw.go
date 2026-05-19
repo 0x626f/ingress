@@ -124,7 +124,7 @@ func (client *RawClient) WS() *ThinClient {
 	return newThinClientWithContext(client.ctx, transport.WS, client.ws, client.sequencer, client.config.SubscriptionStreamSize)
 }
 
-func (client *RawClient) HasResourceByProtocol(kind transport.ConnectionKind) bool {
+func (client *RawClient) HasResourceByProtocol(kind transport.Protocol) bool {
 	if client == nil {
 		return false
 	}
@@ -138,11 +138,11 @@ func (client *RawClient) HasResourceByProtocol(kind transport.ConnectionKind) bo
 	}
 }
 
-func newThinClient(kind transport.ConnectionKind, manager *transport.ConnectionManager, sequencer *transport.SequenceGenerator, subscriptionBufSize int) *ThinClient {
+func newThinClient(kind transport.Protocol, manager *transport.ConnectionManager, sequencer *transport.SequenceGenerator, subscriptionBufSize int) *ThinClient {
 	return newThinClientWithContext(context.Background(), kind, manager, sequencer, subscriptionBufSize)
 }
 
-func newThinClientWithContext(ctx context.Context, kind transport.ConnectionKind, manager *transport.ConnectionManager, sequencer *transport.SequenceGenerator, subscriptionBufSize int) *ThinClient {
+func newThinClientWithContext(ctx context.Context, kind transport.Protocol, manager *transport.ConnectionManager, sequencer *transport.SequenceGenerator, subscriptionBufSize int) *ThinClient {
 	if subscriptionBufSize == 0 {
 		subscriptionBufSize = 64
 	}

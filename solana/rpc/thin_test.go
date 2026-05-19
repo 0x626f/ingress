@@ -240,7 +240,7 @@ func TestNewRawClient_UnknownResourceProtocolUnavailable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRawClient: %v", err)
 	}
-	if raw.HasResourceByProtocol(transport.ConnectionKind(255)) {
+	if raw.HasResourceByProtocol(transport.Protocol(255)) {
 		t.Fatal("expected unknown protocol to be unavailable")
 	}
 }

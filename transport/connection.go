@@ -19,21 +19,21 @@ const (
 	defaultKeepAlivePeriod = 15 * time.Second
 )
 
-// ConnectionKind distinguishes the transport protocol of a connection.
-type ConnectionKind uint8
+// Protocol distinguishes the transport protocol of a connection.
+type Protocol uint8
 
 const (
 	// HTTP represents an HTTP or HTTPS JSON-RPC connection.
-	HTTP ConnectionKind = iota
+	HTTP Protocol = iota
 	// WS represents a WebSocket or WebSocket-Secure JSON-RPC connection.
 	WS
 )
 
 // String returns a human-readable name for the connection kind.
-func (kind ConnectionKind) String() string {
+func (kind Protocol) String() string {
 	switch kind {
 	case HTTP:
-		return "rpc"
+		return "http"
 	case WS:
 		return "ws"
 	}
@@ -57,7 +57,7 @@ type Connection interface {
 	// Resource returns the endpoint URL this connection targets.
 	Resource() string
 	// Kind returns whether this is an HTTP or WebSocket connection.
-	Kind() ConnectionKind
+	Kind() Protocol
 
 	// Send serializes and dispatches a JSON-RPC request.
 	// For HTTP it returns the response body directly.
@@ -118,7 +118,7 @@ func (manager *ConnectionManager) Send(ctx context.Context, data []byte) (result
 
 // BaseConnection holds fields shared by all connection types.
 type BaseConnection struct {
-	kind ConnectionKind
+	kind Protocol
 
 	timeout   time.Duration
 	connected bool
@@ -129,7 +129,7 @@ type BaseConnection struct {
 }
 
 // Kind returns the transport kind of this connection.
-func (connection *BaseConnection) Kind() ConnectionKind {
+func (connection *BaseConnection) Kind() Protocol {
 	return connection.kind
 }
 

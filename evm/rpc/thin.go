@@ -13,7 +13,7 @@ import (
 // For WebSocket it maintains per-request pending channels and routes incoming
 // messages to the correct caller. Obtain a ThinClient via RawClient.HTTP or Client.WS.
 type ThinClient struct {
-	kind      transport.ConnectionKind
+	kind      transport.Protocol
 	manager   *transport.ConnectionManager
 	sequencer *transport.SequenceGenerator
 
@@ -26,7 +26,7 @@ type ThinClient struct {
 	listeners              map[string]transport.RWStream             // subscription to listener
 }
 
-func newThinClient(kind transport.ConnectionKind, manager *transport.ConnectionManager, sequencer *transport.SequenceGenerator, subStreamSize int) *ThinClient {
+func newThinClient(kind transport.Protocol, manager *transport.ConnectionManager, sequencer *transport.SequenceGenerator, subStreamSize int) *ThinClient {
 	if subStreamSize == 0 {
 		subStreamSize = 64
 	}

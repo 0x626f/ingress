@@ -18,7 +18,7 @@ import (
 type ThinClient struct {
 	ctx context.Context
 
-	kind                transport.ConnectionKind
+	kind                transport.Protocol
 	manager             *transport.ConnectionManager
 	sequencer           *transport.SequenceGenerator
 	subscriptionBufSize int

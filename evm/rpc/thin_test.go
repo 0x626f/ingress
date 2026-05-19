@@ -16,14 +16,14 @@ import (
 // ============================================================================
 
 type mockConnection struct {
-	kind        transport.ConnectionKind
+	kind        transport.Protocol
 	response    []byte
 	err         error
 	lastPayload []byte
 	callCount   int
 }
 
-func (m *mockConnection) Kind() transport.ConnectionKind   { return m.kind }
+func (m *mockConnection) Kind() transport.Protocol         { return m.kind }
 func (m *mockConnection) Resource() string                 { return "" }
 func (m *mockConnection) Timeout() time.Duration           { return 0 }
 func (m *mockConnection) Stream() <-chan transport.Message { return nil }
@@ -72,7 +72,7 @@ func okHTTP() *mockConnection {
 }
 
 // failConn returns a mock connection that always fails with a transport error.
-func failConn(k transport.ConnectionKind) *mockConnection {
+func failConn(k transport.Protocol) *mockConnection {
 	return &mockConnection{kind: k, err: errors.New("fail")}
 }
 
@@ -81,7 +81,7 @@ func failConn(k transport.ConnectionKind) *mockConnection {
 // ============================================================================
 
 type mockWSConnection struct {
-	kind        transport.ConnectionKind
+	kind        transport.Protocol
 	events      chan transport.Message
 	lastPayload []byte
 	callCount   int
@@ -91,7 +91,7 @@ type mockWSConnection struct {
 	noRespond   bool
 }
 
-func (m *mockWSConnection) Kind() transport.ConnectionKind   { return m.kind }
+func (m *mockWSConnection) Kind() transport.Protocol         { return m.kind }
 func (m *mockWSConnection) Resource() string                 { return "" }
 func (m *mockWSConnection) Timeout() time.Duration           { return m.timeout }
 func (m *mockWSConnection) Stream() <-chan transport.Message { return m.events }
@@ -220,7 +220,7 @@ func TestRawClient_HasResourceByProtocol_UnknownKindReturnsFalse(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if c.HasResourceByProtocol(transport.ConnectionKind(255)) {
+	if c.HasResourceByProtocol(transport.Protocol(255)) {
 		t.Error("expected unknown protocol to be unavailable")
 	}
 }
