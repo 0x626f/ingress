@@ -4,17 +4,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"sync"
-	"time"
 
 	"github.com/0x626f/ingress/jsonrpc"
-	"github.com/0x626f/ingress/solana/types"
+	"github.com/0x626f/ingress/solana/model"
 	"github.com/0x626f/ingress/transport"
 )
 
 type Subscription struct {
 	ID     uint64
-	Events chan *Event[types.RawResult]
+	Events chan *Event[model.RawResult]
 
 	client            *ThinClient
 	manager           *transport.ConnectionManager
@@ -43,6 +43,7 @@ func (subscription *Subscription) Unsubscribe() error {
 				return
 			}
 			_, _, _, err = subscription.manager.Send(subscription.client.ctx, payload)
+			subscription.client.removeSubscription(strconv.FormatUint(subscription.ID, 10))
 			return
 		}
 	})
@@ -54,64 +55,41 @@ func (client *ThinClient) RawSubscribe(ctx context.Context, subscribeMethod, uns
 }
 
 func (client *ThinClient) rawSubscribeWithManager(ctx context.Context, subscribeMethod, unsubscribeMethod string, params ...any) (*Subscription, error) {
-	if ctx == nil {
-		ctx = context.Background()
+	if client.kind != transport.WS {
+		return nil, fmt.Errorf("%s rpc doesn't support subscribe method", client.kind)
 	}
 
-	manager := client.manager
-	if manager == nil {
-		return nil, fmt.Errorf("no %s connection manager configured", client.kind)
-	}
-
-	id := uint(1)
-	if client.sequencer != nil {
-		id = client.sequencer.Next()
-	}
-	payload, err := jsonrpc.BuildRequest(id, subscribeMethod, params)
+	result, stream, err := client.handle(ctx, func(query *QueryParams) ([]byte, error) {
+		return APISpec{}.BuildMethodCall(subscribeMethod, query)
+	}, Query(params...))
 	if err != nil {
 		return nil, err
 	}
 
-	_, stream, timeout, err := manager.Send(ctx, payload)
+	subscriptionID, err := parseSubscriptionResultID(result)
 	if err != nil {
 		return nil, err
 	}
-	if stream == nil {
-		return nil, fmt.Errorf("no websocket stream available")
-	}
-
-	var timer <-chan time.Time
-	if timeout > 0 {
-		timer = time.After(timeout)
-	}
-
-	var data []byte
-	select {
-	case message, ok := <-stream:
-		if !ok {
-			return nil, fmt.Errorf("websocket stream closed")
-		}
-		data = message
-	case <-timer:
-		return nil, fmt.Errorf("subscription confirmation timeout")
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
-
-	subscriptionID, err := parseSubscriptionID(data)
-	if err != nil {
-		return nil, err
-	}
+	listener := make(transport.RWStream, client.subscriptionBufferSize())
+	subscriptionKey := strconv.FormatUint(subscriptionID, 10)
 
 	subscription := &Subscription{
 		ID:                subscriptionID,
-		Events:            make(chan *Event[types.RawResult], client.subscriptionBufferSize()),
+		Events:            make(chan *Event[model.RawResult], client.subscriptionBufferSize()),
 		client:            client,
-		manager:           manager,
-		stream:            stream,
+		manager:           client.manager,
+		stream:            listener,
 		unsubscribeMethod: unsubscribeMethod,
 		done:              make(chan struct{}),
 	}
+	client.mu.Lock()
+	if _, ok := client.subscriptions[stream]; !ok {
+		client.subscriptions[stream] = make(map[string]struct{})
+	}
+	client.subscriptions[stream][subscriptionKey] = struct{}{}
+	client.listeners[subscriptionKey] = listener
+	client.mu.Unlock()
+
 	go subscription.listen(client)
 	return subscription, nil
 }
@@ -135,19 +113,12 @@ func (subscription *Subscription) listen(client *ThinClient) {
 					return
 				default:
 				}
-				subscription.Events <- &Event[types.RawResult]{Error: fmt.Errorf("websocket stream closed")}
+				subscription.Events <- &Event[model.RawResult]{Error: fmt.Errorf("websocket stream closed")}
 				return
 			}
 			data = message
-
-			result, err := jsonrpc.ParseSubscriptionResult(data)
-			if err != nil {
-				subscription.Events <- &Event[types.RawResult]{Error: err}
-				return
-			}
-
-			if result != nil {
-				subscription.Events <- &Event[types.RawResult]{Data: types.RawResult(result)}
+			if data != nil {
+				subscription.Events <- &Event[model.RawResult]{Data: model.RawResult(data)}
 			}
 		}
 	}
@@ -185,35 +156,49 @@ func parseSubscriptionID(data []byte) (uint64, error) {
 	return 0, fmt.Errorf("missing subscription id")
 }
 
-func (client *ThinClient) AccountSubscribe(ctx context.Context, pubkey string, config ...any) (*Subscription, error) {
+func parseSubscriptionResultID(data []byte) (uint64, error) {
+	var number uint64
+	if err := json.Unmarshal(data, &number); err == nil {
+		return number, nil
+	}
+
+	var text string
+	if err := json.Unmarshal(data, &text); err == nil {
+		return 0, fmt.Errorf("unexpected string subscription id %q", text)
+	}
+
+	return 0, fmt.Errorf("missing subscription id")
+}
+
+func (client *ThinClient) AccountSubscribe(ctx context.Context, query AccountSubscribeQuery) (*Subscription, error) {
 	return client.RawSubscribe(ctx,
 		RPCMethodAccountSubscribe,
 		RPCMethodAccountUnsubscribe,
-		optionalParams([]any{pubkey}, firstOptional(config))...,
+		optionalParams([]any{query.Pubkey}, optionalQueryConfig(query))...,
 	)
 }
 
-func (client *ThinClient) BlockSubscribe(ctx context.Context, filter any, config ...any) (*Subscription, error) {
+func (client *ThinClient) BlockSubscribe(ctx context.Context, query BlockSubscribeQuery) (*Subscription, error) {
 	return client.RawSubscribe(ctx,
 		RPCMethodBlockSubscribe,
 		RPCMethodBlockUnsubscribe,
-		optionalParams([]any{filter}, firstOptional(config))...,
+		optionalParams([]any{query.Filter}, optionalQueryConfig(query))...,
 	)
 }
 
-func (client *ThinClient) LogsSubscribe(ctx context.Context, filter any, config ...any) (*Subscription, error) {
+func (client *ThinClient) LogsSubscribe(ctx context.Context, query LogsSubscribeQuery) (*Subscription, error) {
 	return client.RawSubscribe(ctx,
 		RPCMethodLogsSubscribe,
 		RPCMethodLogsUnsubscribe,
-		optionalParams([]any{filter}, firstOptional(config))...,
+		optionalParams([]any{query.Filter}, optionalQueryConfig(query))...,
 	)
 }
 
-func (client *ThinClient) ProgramSubscribe(ctx context.Context, programID string, config ...any) (*Subscription, error) {
+func (client *ThinClient) ProgramSubscribe(ctx context.Context, query ProgramSubscribeQuery) (*Subscription, error) {
 	return client.RawSubscribe(ctx,
 		RPCMethodProgramSubscribe,
 		RPCMethodProgramUnsubscribe,
-		optionalParams([]any{programID}, firstOptional(config))...,
+		optionalParams([]any{query.ProgramID}, optionalQueryConfig(query))...,
 	)
 }
 
@@ -221,11 +206,11 @@ func (client *ThinClient) RootSubscribe(ctx context.Context) (*Subscription, err
 	return client.RawSubscribe(ctx, RPCMethodRootSubscribe, RPCMethodRootUnsubscribe)
 }
 
-func (client *ThinClient) SignatureSubscribe(ctx context.Context, signature string, config ...any) (*Subscription, error) {
+func (client *ThinClient) SignatureSubscribe(ctx context.Context, query SignatureSubscribeQuery) (*Subscription, error) {
 	return client.RawSubscribe(ctx,
 		RPCMethodSignatureSubscribe,
 		RPCMethodSignatureUnsubscribe,
-		optionalParams([]any{signature}, firstOptional(config))...,
+		optionalParams([]any{query.Signature}, optionalQueryConfig(query))...,
 	)
 }
 
@@ -239,4 +224,32 @@ func (client *ThinClient) SlotsUpdatesSubscribe(ctx context.Context) (*Subscript
 
 func (client *ThinClient) VoteSubscribe(ctx context.Context) (*Subscription, error) {
 	return client.RawSubscribe(ctx, RPCMethodVoteSubscribe, RPCMethodVoteUnsubscribe)
+}
+
+func (client *ThinClient) SubscribeSlot(ctx context.Context) (chan *Event[model.Slot], error) {
+	subscription, err := client.SlotSubscribe(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	channel := make(chan *Event[model.Slot], client.subscriptionBufferSize())
+	go func() {
+		defer close(channel)
+		for event := range subscription.Events {
+			if event.Error != nil {
+				channel <- &Event[model.Slot]{Error: event.Error}
+				continue
+			}
+
+			var update struct {
+				Slot model.Slot `json:"slot"`
+			}
+			if err := json.Unmarshal(event.Data, &update); err != nil {
+				channel <- &Event[model.Slot]{Error: err}
+				continue
+			}
+			channel <- &Event[model.Slot]{Data: update.Slot}
+		}
+	}()
+	return channel, nil
 }

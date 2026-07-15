@@ -146,11 +146,18 @@ func newThinClientWithContext(ctx context.Context, kind transport.Protocol, mana
 	if subscriptionBufSize == 0 {
 		subscriptionBufSize = 64
 	}
-	return &ThinClient{
+	client := &ThinClient{
 		ctx:                 ctx,
 		kind:                kind,
 		manager:             manager,
 		sequencer:           sequencer,
 		subscriptionBufSize: subscriptionBufSize,
 	}
+	if kind == transport.WS {
+		client.pending = make(map[uint]transport.RWStream)
+		client.streams = make(map[transport.RStream]map[uint]struct{})
+		client.subscriptions = make(map[transport.RStream]map[string]struct{})
+		client.listeners = make(map[string]transport.RWStream)
+	}
+	return client
 }

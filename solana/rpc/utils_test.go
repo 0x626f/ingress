@@ -5,15 +5,15 @@ import (
 	"encoding/json"
 	"testing"
 
-	"github.com/0x626f/ingress/solana/types"
+	"github.com/0x626f/ingress/solana/model"
 )
 
 func TestParseRawValue_Object(t *testing.T) {
 	type payload struct {
-		Slot types.Slot `json:"slot"`
+		Slot model.Slot `json:"slot"`
 	}
 
-	result, err := ParseRawValue[payload](types.RawResult(`{"slot":42}`))
+	result, err := ParseRawValue[payload](model.RawResult(`{"slot":42}`))
 	if err != nil {
 		t.Fatalf("ParseRawValue: %v", err)
 	}
@@ -23,7 +23,7 @@ func TestParseRawValue_Object(t *testing.T) {
 }
 
 func TestParseRawNumber_Uint64(t *testing.T) {
-	result, err := ParseRawNumber[uint64](types.RawResult(`18446744073709551615`))
+	result, err := ParseRawNumber[uint64](model.RawResult(`18446744073709551615`))
 	if err != nil {
 		t.Fatalf("ParseRawNumber: %v", err)
 	}
@@ -33,7 +33,7 @@ func TestParseRawNumber_Uint64(t *testing.T) {
 }
 
 func TestParseRawNumber_Int64(t *testing.T) {
-	result, err := ParseRawNumber[int64](types.RawResult(`-42`))
+	result, err := ParseRawNumber[int64](model.RawResult(`-42`))
 	if err != nil {
 		t.Fatalf("ParseRawNumber: %v", err)
 	}
@@ -43,7 +43,7 @@ func TestParseRawNumber_Int64(t *testing.T) {
 }
 
 func TestParseRawNumber_Float64(t *testing.T) {
-	result, err := ParseRawNumber[float64](types.RawResult(`1.25`))
+	result, err := ParseRawNumber[float64](model.RawResult(`1.25`))
 	if err != nil {
 		t.Fatalf("ParseRawNumber: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestParseRawNumber_Float64(t *testing.T) {
 }
 
 func TestParseRawStringAndBool(t *testing.T) {
-	text, err := ParseRawString(types.RawResult(`"ok"`))
+	text, err := ParseRawString(model.RawResult(`"ok"`))
 	if err != nil {
 		t.Fatalf("ParseRawString: %v", err)
 	}
@@ -61,7 +61,7 @@ func TestParseRawStringAndBool(t *testing.T) {
 		t.Fatalf("unexpected string: %s", text)
 	}
 
-	value, err := ParseRawBool(types.RawResult(`true`))
+	value, err := ParseRawBool(model.RawResult(`true`))
 	if err != nil {
 		t.Fatalf("ParseRawBool: %v", err)
 	}

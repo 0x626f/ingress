@@ -1,6 +1,6 @@
 // Integration tests for RawClient against live JSON-RPC endpoints across multiple chains.
 //
-// By default every test runs against all eight supported chains using free public endpoints.
+// By default every test runs against all nine supported chains using free public endpoints.
 // Override per-chain config with environment variables:
 //
 //	<PREFIX>_HTTP_URL=<url>     HTTP endpoint
@@ -10,7 +10,7 @@
 //	<PREFIX>_TX_HASH=<hex>      known transaction hash (derived from latest block if unset)
 //	<PREFIX>_BLOCK_HASH=<hex>   known block hash (derived from block 1 if unset)
 //
-// Chain prefixes: ETH ARB BSC BASE OP MATIC AVAX SONIC
+// Chain prefixes: ETH ARB BSC BASE OP MATIC AVAX SONIC ROBINHOOD
 //
 // Limit which chains run via a comma-separated list of decimal chain IDs:
 //
@@ -122,6 +122,13 @@ var allChains = []*chainConfig{
 		DefaultWSURL:    "", // no free public WS default; set SONIC_WS_URL to enable
 		DefaultAddress:  vitalikAddr,
 		DefaultContract: "0x29219dd400f2Bf60E5a23d13Be72B486D4038894", // USDC on Sonic
+	},
+	{
+		Name: "robinhood", ChainID: 4663, EnvPrefix: "ROBINHOOD",
+		DefaultHTTPURL:  "https://rpc.mainnet.chain.robinhood.com",
+		DefaultWSURL:    "", // no free public WS default; set ROBINHOOD_WS_URL to enable
+		DefaultAddress:  vitalikAddr,
+		DefaultContract: vitalikAddr, // no known default contract; set ROBINHOOD_CONTRACT to override
 	},
 }
 

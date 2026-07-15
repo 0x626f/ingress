@@ -2,8 +2,9 @@ package rpc
 
 import (
 	"context"
+	"encoding/json"
 
-	"github.com/0x626f/ingress/solana/types"
+	"github.com/0x626f/ingress/solana/model"
 )
 
 var _ CoreClient = (*ThinClient)(nil)
@@ -13,92 +14,550 @@ var _ CoreClient = (*ThinClient)(nil)
 // information retrieval, cluster data access, transaction operations, and WebSocket
 // subscriptions.
 type CoreClient interface {
-	RawCall(ctx context.Context, method string, params ...any) (types.RawResult, error)
+	RawCall(ctx context.Context, method string, params ...any) (model.RawResult, error)
 	RawSubscribe(ctx context.Context, subscribeMethod, unsubscribeMethod string, params ...any) (*Subscription, error)
 
-	GetAccountInfo(ctx context.Context, pubkey string, config ...any) (types.RawResult, error)
-	GetBalance(ctx context.Context, pubkey string, config ...any) (types.RawResult, error)
-	GetLargestAccounts(ctx context.Context, config ...any) (types.RawResult, error)
-	GetMinimumBalanceForRentExemption(ctx context.Context, dataSize uint64, commitment ...types.Commitment) (types.RawResult, error)
-	GetMultipleAccounts(ctx context.Context, pubkeys []string, config ...any) (types.RawResult, error)
-	GetProgramAccounts(ctx context.Context, programID string, config ...any) (types.RawResult, error)
-	GetTokenAccountBalance(ctx context.Context, pubkey string, commitment ...types.Commitment) (types.RawResult, error)
-	GetTokenAccountsByDelegate(ctx context.Context, delegate string, filter any, config ...any) (types.RawResult, error)
-	GetTokenAccountsByOwner(ctx context.Context, owner string, filter any, config ...any) (types.RawResult, error)
-	GetTokenLargestAccounts(ctx context.Context, mint string, commitment ...types.Commitment) (types.RawResult, error)
-	GetTokenSupply(ctx context.Context, mint string, commitment ...types.Commitment) (types.RawResult, error)
-	GetFeeForMessage(ctx context.Context, message string, commitment ...types.Commitment) (types.RawResult, error)
-	GetLatestBlockhash(ctx context.Context, commitment ...types.Commitment) (types.RawResult, error)
-	GetRecentPrioritizationFees(ctx context.Context, accounts ...string) (types.RawResult, error)
-	GetSignaturesForAddress(ctx context.Context, address string, config ...any) (types.RawResult, error)
-	GetSignatureStatuses(ctx context.Context, signatures []string, config ...any) (types.RawResult, error)
-	GetTransactionCount(ctx context.Context, commitment ...types.Commitment) (types.RawResult, error)
-	IsBlockhashValid(ctx context.Context, blockhash string, commitment ...types.Commitment) (types.RawResult, error)
-	RequestAirdrop(ctx context.Context, pubkey string, lamports uint64, commitment ...types.Commitment) (types.RawResult, error)
-	SendTransaction(ctx context.Context, serialized []byte, config ...any) (types.RawResult, error)
-	SendEncodedTransaction(ctx context.Context, encoded string, config ...any) (types.RawResult, error)
-	SimulateEncodedTransaction(ctx context.Context, encoded string, config ...any) (types.RawResult, error)
-	GetBlockCommitment(ctx context.Context, slot types.Slot) (types.RawResult, error)
-	GetBlockHeight(ctx context.Context, commitment ...types.Commitment) (types.RawResult, error)
-	GetBlockProduction(ctx context.Context, config ...any) (types.RawResult, error)
-	GetBlocks(ctx context.Context, startSlot types.Slot, endSlot *types.Slot, commitment ...types.Commitment) (types.RawResult, error)
-	GetBlocksWithLimit(ctx context.Context, startSlot types.Slot, limit uint64, commitment ...types.Commitment) (types.RawResult, error)
-	GetBlockTime(ctx context.Context, slot types.Slot) (types.RawResult, error)
-	GetFirstAvailableBlock(ctx context.Context) (types.RawResult, error)
-	GetRecentPerformanceSamples(ctx context.Context, limit ...uint64) (types.RawResult, error)
-	MinimumLedgerSlot(ctx context.Context) (types.RawResult, error)
-	GetEpochSchedule(ctx context.Context) (types.RawResult, error)
-	GetGenesisHash(ctx context.Context) (types.RawResult, error)
-	GetHealth(ctx context.Context) (types.RawResult, error)
-	GetHighestSnapshotSlot(ctx context.Context) (types.RawResult, error)
-	GetIdentity(ctx context.Context) (types.RawResult, error)
-	GetLeaderSchedule(ctx context.Context, slot *types.Slot, config ...any) (types.RawResult, error)
-	GetMaxRetransmitSlot(ctx context.Context) (types.RawResult, error)
-	GetMaxShredInsertSlot(ctx context.Context) (types.RawResult, error)
-	GetSlotLeader(ctx context.Context, commitment ...types.Commitment) (types.RawResult, error)
-	GetVersion(ctx context.Context) (types.RawResult, error)
-	GetInflationGovernor(ctx context.Context, commitment ...types.Commitment) (types.RawResult, error)
-	GetInflationRate(ctx context.Context) (types.RawResult, error)
-	GetInflationReward(ctx context.Context, addresses []string, config ...any) (types.RawResult, error)
-	GetStakeMinimumDelegation(ctx context.Context, commitment ...types.Commitment) (types.RawResult, error)
-	GetSupply(ctx context.Context, config ...any) (types.RawResult, error)
+	GetAccountInfo(ctx context.Context, query GetAccountInfoQuery) (model.RawResult, error)
+	GetBalance(ctx context.Context, query GetBalanceQuery) (model.RawResult, error)
+	GetLargestAccounts(ctx context.Context, query GetLargestAccountsQuery) (model.RawResult, error)
+	GetMinimumBalanceForRentExemption(ctx context.Context, query GetMinimumBalanceForRentExemptionQuery) (model.RawResult, error)
+	GetMultipleAccounts(ctx context.Context, query GetMultipleAccountsQuery) (model.RawResult, error)
+	GetProgramAccounts(ctx context.Context, query GetProgramAccountsQuery) (model.RawResult, error)
+	GetTokenAccountBalance(ctx context.Context, query GetTokenAccountBalanceQuery) (model.RawResult, error)
+	GetTokenAccountsByDelegate(ctx context.Context, query GetTokenAccountsByDelegateQuery) (model.RawResult, error)
+	GetTokenAccountsByOwner(ctx context.Context, query GetTokenAccountsByOwnerQuery) (model.RawResult, error)
+	GetTokenLargestAccounts(ctx context.Context, query GetTokenLargestAccountsQuery) (model.RawResult, error)
+	GetTokenSupply(ctx context.Context, query GetTokenSupplyQuery) (model.RawResult, error)
+	GetFeeForMessage(ctx context.Context, query GetFeeForMessageQuery) (model.RawResult, error)
+	GetLatestBlockhash(ctx context.Context, query GetLatestBlockhashQuery) (model.RawResult, error)
+	GetRecentPrioritizationFees(ctx context.Context, query GetRecentPrioritizationFeesQuery) (model.RawResult, error)
+	GetSignaturesForAddress(ctx context.Context, query GetSignaturesForAddressQuery) (model.RawResult, error)
+	GetSignatureStatuses(ctx context.Context, query GetSignatureStatusesQuery) (model.RawResult, error)
+	GetTransactionCount(ctx context.Context, query GetTransactionCountQuery) (model.RawResult, error)
+	IsBlockhashValid(ctx context.Context, query IsBlockhashValidQuery) (model.RawResult, error)
+	RequestAirdrop(ctx context.Context, query RequestAirdropQuery) (model.RawResult, error)
+	SendTransaction(ctx context.Context, query SendTransactionQuery) (model.RawResult, error)
+	SendEncodedTransaction(ctx context.Context, query SendTransactionQuery) (model.RawResult, error)
+	SimulateEncodedTransaction(ctx context.Context, query SimulateTransactionQuery) (model.RawResult, error)
+	GetBlockCommitment(ctx context.Context, query SlotQuery) (model.RawResult, error)
+	GetBlockHeight(ctx context.Context, query GetBlockHeightQuery) (model.RawResult, error)
+	GetBlockProduction(ctx context.Context, query GetBlockProductionQuery) (model.RawResult, error)
+	GetBlocks(ctx context.Context, query GetBlocksQuery) (model.RawResult, error)
+	GetBlocksWithLimit(ctx context.Context, query GetBlocksWithLimitQuery) (model.RawResult, error)
+	GetBlockTime(ctx context.Context, query SlotQuery) (model.RawResult, error)
+	GetFirstAvailableBlock(ctx context.Context) (model.RawResult, error)
+	GetRecentPerformanceSamples(ctx context.Context, query GetRecentPerformanceSamplesQuery) (model.RawResult, error)
+	MinimumLedgerSlot(ctx context.Context) (model.RawResult, error)
+	GetEpochSchedule(ctx context.Context) (model.RawResult, error)
+	GetGenesisHash(ctx context.Context) (model.RawResult, error)
+	GetHealth(ctx context.Context) (model.RawResult, error)
+	GetHighestSnapshotSlot(ctx context.Context) (model.RawResult, error)
+	GetIdentity(ctx context.Context) (model.RawResult, error)
+	GetLeaderSchedule(ctx context.Context, query GetLeaderScheduleQuery) (model.RawResult, error)
+	GetMaxRetransmitSlot(ctx context.Context) (model.RawResult, error)
+	GetMaxShredInsertSlot(ctx context.Context) (model.RawResult, error)
+	GetSlotLeader(ctx context.Context, query GetSlotLeaderQuery) (model.RawResult, error)
+	GetVersion(ctx context.Context) (model.RawResult, error)
+	GetInflationGovernor(ctx context.Context, query GetInflationGovernorQuery) (model.RawResult, error)
+	GetInflationRate(ctx context.Context) (model.RawResult, error)
+	GetInflationReward(ctx context.Context, query GetInflationRewardQuery) (model.RawResult, error)
+	GetStakeMinimumDelegation(ctx context.Context, query GetStakeMinimumDelegationQuery) (model.RawResult, error)
+	GetSupply(ctx context.Context, query GetSupplyQuery) (model.RawResult, error)
 
 	// GetEpochInfo retrieves current epoch information with the specified commitment level
-	GetEpochInfo(ctx context.Context, commitment types.Commitment) (types.RawResult, error)
+	GetEpochInfo(ctx context.Context, query GetEpochInfoQuery) (model.RawResult, error)
 
 	// GetSlot returns the current slot number with the specified commitment level
-	GetSlot(ctx context.Context, commitment types.Commitment) (types.Slot, error)
+	GetSlot(ctx context.Context, query GetSlotQuery) (model.Slot, error)
 
 	// GetSlotLeaders returns the slot leaders starting from the specified slot up to the limit
-	GetSlotLeaders(ctx context.Context, from types.Slot, limit uint16) (types.SlotLeaders, error)
+	GetSlotLeaders(ctx context.Context, query GetSlotLeadersQuery) (model.SlotLeaders, error)
 
 	// GetClusterNodes retrieves information about all nodes in the cluster
-	GetClusterNodes(ctx context.Context) (types.RawResult, error)
+	GetClusterNodes(ctx context.Context) (model.RawResult, error)
 
 	// GetVoteAccounts returns information about all vote accounts in the cluster
-	GetVoteAccounts(ctx context.Context) (types.RawResult, error)
+	GetVoteAccounts(ctx context.Context) (model.RawResult, error)
 
 	// SimulateTransaction simulates a transaction with the specified commitment level
-	SimulateTransaction(ctx context.Context, serialized []byte, commitment types.Commitment) error
+	SimulateTransaction(ctx context.Context, query SimulateTransactionQuery) error
 
 	// GetTransaction retrieves transaction information by signature
-	GetTransaction(ctx context.Context, signature string, config ...any) (types.RawResult, error)
+	GetTransaction(ctx context.Context, query GetTransactionQuery) (model.RawResult, error)
 
-	GetBlock(ctx context.Context, slot types.Slot, commitment types.Commitment) (types.RawResult, error)
+	GetBlock(ctx context.Context, query GetBlockQuery) (model.RawResult, error)
 
-	GetConfirmedSlots(ctx context.Context, from, to types.Slot, commitment types.Commitment) (types.ConfirmedSlots, error)
+	GetConfirmedSlots(ctx context.Context, query GetConfirmedSlotsQuery) (model.ConfirmedSlots, error)
 
-	AccountSubscribe(ctx context.Context, pubkey string, config ...any) (*Subscription, error)
-	BlockSubscribe(ctx context.Context, filter any, config ...any) (*Subscription, error)
-	LogsSubscribe(ctx context.Context, filter any, config ...any) (*Subscription, error)
-	ProgramSubscribe(ctx context.Context, programID string, config ...any) (*Subscription, error)
+	AccountSubscribe(ctx context.Context, query AccountSubscribeQuery) (*Subscription, error)
+	BlockSubscribe(ctx context.Context, query BlockSubscribeQuery) (*Subscription, error)
+	LogsSubscribe(ctx context.Context, query LogsSubscribeQuery) (*Subscription, error)
+	ProgramSubscribe(ctx context.Context, query ProgramSubscribeQuery) (*Subscription, error)
 	RootSubscribe(ctx context.Context) (*Subscription, error)
-	SignatureSubscribe(ctx context.Context, signature string, config ...any) (*Subscription, error)
+	SignatureSubscribe(ctx context.Context, query SignatureSubscribeQuery) (*Subscription, error)
 	SlotSubscribe(ctx context.Context) (*Subscription, error)
 	SlotsUpdatesSubscribe(ctx context.Context) (*Subscription, error)
 	VoteSubscribe(ctx context.Context) (*Subscription, error)
-	SubscribeSlot(ctx context.Context) (chan *Event[types.Slot], error)
+	SubscribeSlot(ctx context.Context) (chan *Event[model.Slot], error)
 }
 
 // LiteRPC is kept as a compatibility alias for the previous interface name.
 type LiteRPC = CoreClient
+
+// IdentifiedQuery carries an optional caller-supplied request ID.
+// When Id is zero the sequencer assigns one automatically.
+type IdentifiedQuery struct {
+	Id uint `json:"-"`
+}
+
+// QueryParams holds the request ID and positional parameters for a JSON-RPC call.
+type QueryParams struct {
+	Id     uint
+	Params []any
+}
+
+func DefaultQueryParams() *QueryParams {
+	return &QueryParams{Id: 1, Params: []any{}}
+}
+
+func Query(params ...any) *QueryParams {
+	return &QueryParams{Params: params}
+}
+
+func QueryWithId(id uint, params ...any) *QueryParams {
+	return &QueryParams{Id: id, Params: params}
+}
+
+func (params *QueryParams) Adjust() {
+	if params.Id == 0 {
+		params.Id = 1
+	}
+	if params.Params == nil {
+		params.Params = []any{}
+	}
+}
+
+// Encoding selects how account, transaction, and instruction data is returned.
+type Encoding string
+
+const (
+	EncodingBase58     Encoding = "base58"
+	EncodingBase64     Encoding = "base64"
+	EncodingBase64Zstd Encoding = "base64+zstd"
+	EncodingJSONParsed Encoding = "jsonParsed"
+)
+
+// TransactionDetails selects how much transaction detail block responses include.
+type TransactionDetails string
+
+const (
+	TransactionDetailsFull       TransactionDetails = "full"
+	TransactionDetailsAccounts   TransactionDetails = "accounts"
+	TransactionDetailsSignatures TransactionDetails = "signatures"
+	TransactionDetailsNone       TransactionDetails = "none"
+)
+
+// DataSlice requests a byte range from account data.
+type DataSlice struct {
+	Offset uint64 `json:"offset"`
+	Length uint64 `json:"length"`
+}
+
+// LargestAccountsFilter limits getLargestAccounts results.
+type LargestAccountsFilter string
+
+const (
+	LargestAccountsFilterCirculating    LargestAccountsFilter = "circulating"
+	LargestAccountsFilterNonCirculating LargestAccountsFilter = "nonCirculating"
+)
+
+// MemcmpFilter matches account data at an offset.
+type MemcmpFilter struct {
+	Offset   uint64   `json:"offset"`
+	Bytes    string   `json:"bytes"`
+	Encoding Encoding `json:"encoding,omitempty"`
+}
+
+// ProgramAccountsFilter configures a single getProgramAccounts/programSubscribe filter.
+type ProgramAccountsFilter struct {
+	DataSize uint64        `json:"dataSize,omitempty"`
+	Memcmp   *MemcmpFilter `json:"memcmp,omitempty"`
+}
+
+// TokenAccountsFilter selects token accounts by mint or token program id.
+type TokenAccountsFilter struct {
+	Mint      string `json:"mint,omitempty"`
+	ProgramID string `json:"programId,omitempty"`
+}
+
+// SimulateTransactionAccounts requests account snapshots from simulateTransaction.
+type SimulateTransactionAccounts struct {
+	Encoding  Encoding `json:"encoding,omitempty"`
+	Addresses []string `json:"addresses,omitempty"`
+}
+
+// BlockProductionRange limits getBlockProduction to a slot range.
+type BlockProductionRange struct {
+	FirstSlot model.Slot `json:"firstSlot,omitempty"`
+	LastSlot  model.Slot `json:"lastSlot,omitempty"`
+}
+
+// BlockSubscribeFilterKind selects the stream scope for blockSubscribe.
+type BlockSubscribeFilterKind string
+
+const (
+	BlockSubscribeAll          BlockSubscribeFilterKind = "all"
+	BlockSubscribeAllWithVotes BlockSubscribeFilterKind = "allWithVotes"
+)
+
+// BlockSubscribeFilter configures the first blockSubscribe parameter.
+type BlockSubscribeFilter struct {
+	Kind                     BlockSubscribeFilterKind `json:"-"`
+	MentionsAccountOrProgram string                   `json:"mentionsAccountOrProgram,omitempty"`
+}
+
+func (filter BlockSubscribeFilter) MarshalJSON() ([]byte, error) {
+	if filter.MentionsAccountOrProgram != "" {
+		return json.Marshal(struct {
+			MentionsAccountOrProgram string `json:"mentionsAccountOrProgram"`
+		}{MentionsAccountOrProgram: filter.MentionsAccountOrProgram})
+	}
+	return json.Marshal(filter.Kind)
+}
+
+// LogsSubscribeFilterKind selects the stream scope for logsSubscribe.
+type LogsSubscribeFilterKind string
+
+const (
+	LogsSubscribeAll          LogsSubscribeFilterKind = "all"
+	LogsSubscribeAllWithVotes LogsSubscribeFilterKind = "allWithVotes"
+)
+
+// LogsSubscribeFilter configures the first logsSubscribe parameter.
+type LogsSubscribeFilter struct {
+	Kind     LogsSubscribeFilterKind `json:"-"`
+	Mentions []string                `json:"mentions,omitempty"`
+}
+
+func (filter LogsSubscribeFilter) MarshalJSON() ([]byte, error) {
+	if len(filter.Mentions) > 0 {
+		return json.Marshal(struct {
+			Mentions []string `json:"mentions"`
+		}{Mentions: filter.Mentions})
+	}
+	return json.Marshal(filter.Kind)
+}
+
+type GetAccountInfoQuery struct {
+	IdentifiedQuery
+	Pubkey         string           `json:"-"`
+	Commitment     model.Commitment `json:"commitment,omitempty"`
+	Encoding       Encoding         `json:"encoding,omitempty"`
+	DataSlice      *DataSlice       `json:"dataSlice,omitempty"`
+	MinContextSlot model.Slot       `json:"minContextSlot,omitempty"`
+}
+
+type GetBalanceQuery struct {
+	IdentifiedQuery
+	Pubkey         string           `json:"-"`
+	Commitment     model.Commitment `json:"commitment,omitempty"`
+	MinContextSlot model.Slot       `json:"minContextSlot,omitempty"`
+}
+
+type GetLargestAccountsQuery struct {
+	IdentifiedQuery
+	Commitment model.Commitment      `json:"commitment,omitempty"`
+	Filter     LargestAccountsFilter `json:"filter,omitempty"`
+}
+
+type GetMinimumBalanceForRentExemptionQuery struct {
+	IdentifiedQuery
+	DataSize   uint64
+	Commitment model.Commitment
+}
+
+type GetMultipleAccountsQuery struct {
+	IdentifiedQuery
+	Pubkeys        []string         `json:"-"`
+	Commitment     model.Commitment `json:"commitment,omitempty"`
+	Encoding       Encoding         `json:"encoding,omitempty"`
+	DataSlice      *DataSlice       `json:"dataSlice,omitempty"`
+	MinContextSlot model.Slot       `json:"minContextSlot,omitempty"`
+}
+
+type GetProgramAccountsQuery struct {
+	IdentifiedQuery
+	ProgramID      string                  `json:"-"`
+	Commitment     model.Commitment        `json:"commitment,omitempty"`
+	Encoding       Encoding                `json:"encoding,omitempty"`
+	DataSlice      *DataSlice              `json:"dataSlice,omitempty"`
+	Filters        []ProgramAccountsFilter `json:"filters,omitempty"`
+	WithContext    bool                    `json:"withContext,omitempty"`
+	MinContextSlot model.Slot              `json:"minContextSlot,omitempty"`
+}
+
+type GetTokenAccountBalanceQuery struct {
+	IdentifiedQuery
+	Pubkey     string           `json:"-"`
+	Commitment model.Commitment `json:"commitment,omitempty"`
+}
+
+type GetTokenAccountsByDelegateQuery struct {
+	IdentifiedQuery
+	Delegate       string              `json:"-"`
+	Filter         TokenAccountsFilter `json:"-"`
+	Commitment     model.Commitment    `json:"commitment,omitempty"`
+	Encoding       Encoding            `json:"encoding,omitempty"`
+	DataSlice      *DataSlice          `json:"dataSlice,omitempty"`
+	MinContextSlot model.Slot          `json:"minContextSlot,omitempty"`
+}
+
+type GetTokenAccountsByOwnerQuery struct {
+	IdentifiedQuery
+	Owner          string              `json:"-"`
+	Filter         TokenAccountsFilter `json:"-"`
+	Commitment     model.Commitment    `json:"commitment,omitempty"`
+	Encoding       Encoding            `json:"encoding,omitempty"`
+	DataSlice      *DataSlice          `json:"dataSlice,omitempty"`
+	MinContextSlot model.Slot          `json:"minContextSlot,omitempty"`
+}
+
+type GetTokenLargestAccountsQuery struct {
+	IdentifiedQuery
+	Mint       string           `json:"-"`
+	Commitment model.Commitment `json:"commitment,omitempty"`
+}
+
+type GetTokenSupplyQuery struct {
+	IdentifiedQuery
+	Mint       string           `json:"-"`
+	Commitment model.Commitment `json:"commitment,omitempty"`
+}
+
+type GetFeeForMessageQuery struct {
+	IdentifiedQuery
+	Message    string           `json:"-"`
+	Commitment model.Commitment `json:"commitment,omitempty"`
+}
+
+type GetLatestBlockhashQuery struct {
+	IdentifiedQuery
+	Commitment model.Commitment `json:"commitment,omitempty"`
+}
+
+type GetRecentPrioritizationFeesQuery struct {
+	IdentifiedQuery
+	Accounts []string
+}
+
+type GetSignaturesForAddressQuery struct {
+	IdentifiedQuery
+	Address        string           `json:"-"`
+	Commitment     model.Commitment `json:"commitment,omitempty"`
+	MinContextSlot model.Slot       `json:"minContextSlot,omitempty"`
+	Limit          uint64           `json:"limit,omitempty"`
+	Before         string           `json:"before,omitempty"`
+	Until          string           `json:"until,omitempty"`
+}
+
+type GetSignatureStatusesQuery struct {
+	IdentifiedQuery
+	Signatures               []string `json:"-"`
+	SearchTransactionHistory bool     `json:"searchTransactionHistory,omitempty"`
+}
+
+type GetTransactionCountQuery struct {
+	IdentifiedQuery
+	Commitment model.Commitment `json:"commitment,omitempty"`
+}
+
+type IsBlockhashValidQuery struct {
+	IdentifiedQuery
+	Blockhash  string           `json:"-"`
+	Commitment model.Commitment `json:"commitment,omitempty"`
+}
+
+type RequestAirdropQuery struct {
+	IdentifiedQuery
+	Pubkey     string           `json:"-"`
+	Lamports   uint64           `json:"-"`
+	Commitment model.Commitment `json:"commitment,omitempty"`
+}
+
+type SendTransactionQuery struct {
+	IdentifiedQuery
+	Serialized          []byte           `json:"-"`
+	Encoded             string           `json:"-"`
+	SkipPreflight       bool             `json:"skipPreflight,omitempty"`
+	PreflightCommitment model.Commitment `json:"preflightCommitment,omitempty"`
+	Encoding            Encoding         `json:"encoding,omitempty"`
+	MaxRetries          uint64           `json:"maxRetries,omitempty"`
+	MinContextSlot      model.Slot       `json:"minContextSlot,omitempty"`
+}
+
+type SimulateTransactionQuery struct {
+	IdentifiedQuery
+	Serialized             []byte                       `json:"-"`
+	Encoded                string                       `json:"-"`
+	SigVerify              bool                         `json:"sigVerify,omitempty"`
+	ReplaceRecentBlockhash bool                         `json:"replaceRecentBlockhash,omitempty"`
+	Commitment             model.Commitment             `json:"commitment,omitempty"`
+	Encoding               Encoding                     `json:"encoding,omitempty"`
+	Accounts               *SimulateTransactionAccounts `json:"accounts,omitempty"`
+	MinContextSlot         model.Slot                   `json:"minContextSlot,omitempty"`
+	InnerInstructions      bool                         `json:"innerInstructions,omitempty"`
+}
+
+type SlotQuery struct {
+	IdentifiedQuery
+	Slot model.Slot
+}
+
+type GetBlockHeightQuery struct {
+	IdentifiedQuery
+	Commitment model.Commitment `json:"commitment,omitempty"`
+}
+
+type GetBlockProductionQuery struct {
+	IdentifiedQuery
+	Identity   string                `json:"identity,omitempty"`
+	FirstSlot  model.Slot            `json:"firstSlot,omitempty"`
+	LastSlot   model.Slot            `json:"lastSlot,omitempty"`
+	Range      *BlockProductionRange `json:"range,omitempty"`
+	Commitment model.Commitment      `json:"commitment,omitempty"`
+}
+
+type GetBlocksQuery struct {
+	IdentifiedQuery
+	StartSlot  model.Slot
+	EndSlot    *model.Slot
+	Commitment model.Commitment
+}
+
+type GetBlocksWithLimitQuery struct {
+	IdentifiedQuery
+	StartSlot  model.Slot
+	Limit      uint64
+	Commitment model.Commitment
+}
+
+type GetRecentPerformanceSamplesQuery struct {
+	IdentifiedQuery
+	Limit uint64
+}
+
+type GetLeaderScheduleQuery struct {
+	IdentifiedQuery
+	Slot       *model.Slot      `json:"-"`
+	Identity   string           `json:"identity,omitempty"`
+	Commitment model.Commitment `json:"commitment,omitempty"`
+}
+
+type GetSlotLeaderQuery struct {
+	IdentifiedQuery
+	Commitment model.Commitment
+}
+
+type GetInflationGovernorQuery struct {
+	IdentifiedQuery
+	Commitment model.Commitment
+}
+
+type GetInflationRewardQuery struct {
+	IdentifiedQuery
+	Addresses      []string         `json:"-"`
+	Epoch          uint64           `json:"epoch,omitempty"`
+	Commitment     model.Commitment `json:"commitment,omitempty"`
+	MinContextSlot model.Slot       `json:"minContextSlot,omitempty"`
+}
+
+type GetStakeMinimumDelegationQuery struct {
+	IdentifiedQuery
+	Commitment model.Commitment
+}
+
+type GetSupplyQuery struct {
+	IdentifiedQuery
+	Commitment                        model.Commitment `json:"commitment,omitempty"`
+	ExcludeNonCirculatingAccountsList bool             `json:"excludeNonCirculatingAccountsList,omitempty"`
+}
+
+type GetEpochInfoQuery struct {
+	IdentifiedQuery
+	Commitment model.Commitment
+}
+
+type GetSlotQuery struct {
+	IdentifiedQuery
+	Commitment model.Commitment
+}
+
+type GetSlotLeadersQuery struct {
+	IdentifiedQuery
+	From  model.Slot
+	Limit uint16
+}
+
+type GetTransactionQuery struct {
+	IdentifiedQuery
+	Signature                      string           `json:"-"`
+	Commitment                     model.Commitment `json:"commitment,omitempty"`
+	Encoding                       Encoding         `json:"encoding,omitempty"`
+	MaxSupportedTransactionVersion *uint64          `json:"maxSupportedTransactionVersion,omitempty"`
+}
+
+type GetBlockQuery struct {
+	IdentifiedQuery
+	Slot       model.Slot
+	Commitment model.Commitment
+}
+
+type GetConfirmedSlotsQuery struct {
+	IdentifiedQuery
+	From       model.Slot
+	To         model.Slot
+	Commitment model.Commitment
+}
+
+type AccountSubscribeQuery struct {
+	IdentifiedQuery
+	Pubkey         string           `json:"-"`
+	Commitment     model.Commitment `json:"commitment,omitempty"`
+	Encoding       Encoding         `json:"encoding,omitempty"`
+	DataSlice      *DataSlice       `json:"dataSlice,omitempty"`
+	MinContextSlot model.Slot       `json:"minContextSlot,omitempty"`
+}
+
+type BlockSubscribeQuery struct {
+	IdentifiedQuery
+	Filter                         BlockSubscribeFilter `json:"-"`
+	Commitment                     model.Commitment     `json:"commitment,omitempty"`
+	Encoding                       Encoding             `json:"encoding,omitempty"`
+	TransactionDetails             TransactionDetails   `json:"transactionDetails,omitempty"`
+	ShowRewards                    bool                 `json:"showRewards,omitempty"`
+	MaxSupportedTransactionVersion *uint64              `json:"maxSupportedTransactionVersion,omitempty"`
+}
+
+type LogsSubscribeQuery struct {
+	IdentifiedQuery
+	Filter     LogsSubscribeFilter `json:"-"`
+	Commitment model.Commitment    `json:"commitment,omitempty"`
+}
+
+type ProgramSubscribeQuery struct {
+	IdentifiedQuery
+	ProgramID      string                  `json:"-"`
+	Commitment     model.Commitment        `json:"commitment,omitempty"`
+	Encoding       Encoding                `json:"encoding,omitempty"`
+	DataSlice      *DataSlice              `json:"dataSlice,omitempty"`
+	Filters        []ProgramAccountsFilter `json:"filters,omitempty"`
+	WithContext    bool                    `json:"withContext,omitempty"`
+	MinContextSlot model.Slot              `json:"minContextSlot,omitempty"`
+}
+
+type SignatureSubscribeQuery struct {
+	IdentifiedQuery
+	Signature                  string           `json:"-"`
+	Commitment                 model.Commitment `json:"commitment,omitempty"`
+	EnableReceivedNotification bool             `json:"enableReceivedNotification,omitempty"`
+}
