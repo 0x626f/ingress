@@ -44,16 +44,13 @@ github.com/0x626f/ingress
 │   ├── model/
 │   │   └── core.go            # Solana response DTOs only
 │   ├── rpc/
-│   │   ├── core.go            # Solana CoreClient interface
+│   │   ├── core.go            # Solana CoreClient interface and query DTOs
 │   │   ├── http.go            # HTTP RPC methods
 │   │   ├── raw.go             # RawClient and context-aware construction
+│   │   ├── spec.go            # Solana JSON-RPC request/response spec helpers
 │   │   ├── thin.go            # Shared Solana ThinClient code
 │   │   ├── utils.go           # Raw parsing and base58 helpers
-│   │   ├── vars.go            # Commitment constants and RPC method names
 │   │   └── ws.go              # WebSocket subscriptions
-│   └── types/
-│       ├── base.go            # Compatibility/base aliases
-│       └── dto.go             # Existing compatibility DTOs
 ├── jsonrpc/
 │   └── spec.go                # Shared JSON-RPC 2.0 helpers
 └── transport/
@@ -158,7 +155,9 @@ func main() {
 
 	http := ingress.Solana.HTTP()
 
-	epochRaw, err := http.GetEpochInfo(context.Background(), rpc.FinalizedCommitment)
+	epochRaw, err := http.GetEpochInfo(context.Background(), rpc.GetEpochInfoQuery{
+		Commitment: model.FinalizedCommitment,
+	})
 	if err != nil {
 		panic(err)
 	}
@@ -169,7 +168,9 @@ func main() {
 	}
 	fmt.Println("epoch:", epoch.Epoch)
 
-	blockhashRaw, err := http.GetLatestBlockhash(context.Background(), rpc.FinalizedCommitment)
+	blockhashRaw, err := http.GetLatestBlockhash(context.Background(), rpc.GetLatestBlockhashQuery{
+		Commitment: model.FinalizedCommitment,
+	})
 	if err != nil {
 		panic(err)
 	}
@@ -283,7 +284,7 @@ Most EVM methods return `([]byte, error)`. Subscription calls use `evm.Subscript
 
 ## Solana RPC Surface
 
-`solana/rpc.CoreClient` includes account, token, block, epoch, validator, inflation, transaction, and subscription methods. Most methods return `types.RawResult`, which can be unmarshaled into `solana/model` DTOs or application-specific structs.
+`solana/rpc.CoreClient` includes account, token, block, epoch, validator, inflation, transaction, and subscription methods. Most methods accept typed query structs and return `model.RawResult`, which can be unmarshaled into `solana/model` DTOs or application-specific structs.
 
 Examples of covered RPC methods:
 
@@ -301,11 +302,21 @@ rootSubscribe, signatureSubscribe, slotSubscribe, slotsUpdatesSubscribe, voteSub
 
 Some Solana convenience methods return parsed values directly:
 
-- `GetSlot(commitment)` returns `types.Slot`.
-- `GetSlotLeaders(from, limit)` returns `types.SlotLeaders`.
-- `GetConfirmedSlots(from, to, commitment)` returns `types.ConfirmedSlots`.
-- `SimulateTransaction(serialized, commitment)` returns only an error.
+- `GetSlot(GetSlotQuery)` returns `model.Slot`.
+- `GetSlotLeaders(GetSlotLeadersQuery)` returns `model.SlotLeaders`.
+- `GetConfirmedSlots(GetConfirmedSlotsQuery)` returns `model.ConfirmedSlots`.
+- `SimulateTransaction(SimulateTransactionQuery)` returns only an error.
 - `SubscribeSlot()` returns a channel of slot events.
+
+Solana query structs expose configurable request properties directly in one object:
+
+```go
+balanceRaw, err := http.GetBalance(context.Background(), rpc.GetBalanceQuery{
+	Pubkey:         "11111111111111111111111111111111",
+	Commitment:     model.ConfirmedCommitment,
+	MinContextSlot: 123,
+})
+```
 
 ## Models and Decoding
 
@@ -377,7 +388,9 @@ Solana:
 ```go
 ws := raw.WS()
 
-sub, err := ws.LogsSubscribe("all")
+sub, err := ws.LogsSubscribe(context.Background(), rpc.LogsSubscribeQuery{
+	Filter: rpc.LogsSubscribeFilter{Kind: rpc.LogsSubscribeAll},
+})
 if err != nil {
 	panic(err)
 }
@@ -403,7 +416,7 @@ Focused package checks:
 
 ```bash
 go test ./evm ./evm/rpc ./evm/model ./jsonrpc
-go test ./solana/model ./solana/rpc ./solana/types
+go test ./solana/model ./solana/rpc
 ```
 
 Solana RPC tests use public live endpoints by default:
@@ -411,11 +424,12 @@ Solana RPC tests use public live endpoints by default:
 ```bash
 SOLANA_HTTP_URL=https://api.mainnet-beta.solana.com \
 SOLANA_WS_URL=wss://api.mainnet-beta.solana.com \
-SOLANA_RPC_TEST_DELAY=350ms \
+SOLANA_RPC_TEST_DELAY=1s \
+SOLANA_RPC_TEST_RETRY_DELAY=5s \
 go test ./solana/rpc
 ```
 
-The Solana defaults are the same as the URLs above. Increase `SOLANA_RPC_TEST_DELAY` when a public endpoint rate-limits the test run. Expensive public calls that still return `429` are skipped.
+The Solana defaults are the same as the URLs above. Increase `SOLANA_RPC_TEST_DELAY` or `SOLANA_RPC_TEST_RETRY_DELAY` when a public endpoint rate-limits the test run. Expensive public calls that still return `429` after retries are skipped.
 
 Some EVM integration tests use live public endpoints and may fail when upstream providers return empty data or are unavailable. Prefer focused package checks for routine development, and use provider-specific endpoints for full integration runs.
 
