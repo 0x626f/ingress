@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/0x626f/ingress/solana/types"
+	"github.com/0x626f/ingress/solana/model"
 	"github.com/mr-tron/base58"
 )
 
@@ -25,8 +25,8 @@ type RawNumber interface {
 //
 // Example:
 //
-//	nodes, err := ParseRawResultToArray[types.TPUQuick](rawResult)
-func ParseRawResultToArray[T any](data types.RawResult) ([]*T, error) {
+//	nodes, err := ParseRawResultToArray[model.TPUQuick](rawResult)
+func ParseRawResultToArray[T any](data model.RawResult) ([]*T, error) {
 	var result []*T
 
 	err := json.Unmarshal(data, &result)
@@ -40,8 +40,8 @@ func ParseRawResultToArray[T any](data types.RawResult) ([]*T, error) {
 //
 // Example:
 //
-//	epochInfo, err := ParseRawResult[types.EpochInfo](rawResult)
-func ParseRawResult[T any](data types.RawResult) (*T, error) {
+//	epochInfo, err := ParseRawResult[model.EpochInfo](rawResult)
+func ParseRawResult[T any](data model.RawResult) (*T, error) {
 	var result *T
 
 	err := json.Unmarshal(data, &result)
@@ -51,7 +51,7 @@ func ParseRawResult[T any](data types.RawResult) (*T, error) {
 
 // ParseRawValue unmarshals a RawResult into a concrete value. It works for
 // objects, arrays, strings, booleans, and JSON numbers.
-func ParseRawValue[T any](data types.RawResult) (T, error) {
+func ParseRawValue[T any](data model.RawResult) (T, error) {
 	var result T
 	err := json.Unmarshal(data, &result)
 	return result, err
@@ -59,7 +59,7 @@ func ParseRawValue[T any](data types.RawResult) (T, error) {
 
 // ParseRawNumber parses a RawResult containing a JSON number into the requested
 // numeric type. It avoids float64 conversion for integer targets.
-func ParseRawNumber[T RawNumber](data types.RawResult) (T, error) {
+func ParseRawNumber[T RawNumber](data model.RawResult) (T, error) {
 	var zero T
 	raw := strings.TrimSpace(string(data))
 	if raw == "" {
@@ -83,12 +83,12 @@ func ParseRawNumber[T RawNumber](data types.RawResult) (T, error) {
 }
 
 // ParseRawString parses a RawResult containing a JSON string.
-func ParseRawString(data types.RawResult) (string, error) {
+func ParseRawString(data model.RawResult) (string, error) {
 	return ParseRawValue[string](data)
 }
 
 // ParseRawBool parses a RawResult containing a JSON boolean.
-func ParseRawBool(data types.RawResult) (bool, error) {
+func ParseRawBool(data model.RawResult) (bool, error) {
 	return ParseRawValue[bool](data)
 }
 

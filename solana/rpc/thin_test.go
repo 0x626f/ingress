@@ -10,14 +10,15 @@ import (
 	"time"
 
 	"github.com/0x626f/ingress/solana/model"
-	"github.com/0x626f/ingress/solana/types"
 	"github.com/0x626f/ingress/transport"
 )
 
 const (
-	defaultPublicHTTPURL  = "https://api.mainnet-beta.solana.com"
-	defaultPublicWSURL    = "wss://api.mainnet-beta.solana.com"
-	defaultPublicRPCDelay = 350 * time.Millisecond
+	defaultPublicHTTPURL       = "https://api.mainnet-beta.solana.com"
+	defaultPublicWSURL         = "wss://api.mainnet-beta.solana.com"
+	defaultPublicRPCDelay      = time.Second
+	defaultPublicRPCRetryDelay = 5 * time.Second
+	defaultPublicRPCRetries    = 3
 
 	systemProgramID = "11111111111111111111111111111111"
 	wrappedSOLMint  = "So11111111111111111111111111111111111111112"
@@ -52,6 +53,40 @@ func publicRPCDelay() time.Duration {
 	return defaultPublicRPCDelay
 }
 
+func publicRPCRetryDelay() time.Duration {
+	if value := os.Getenv("SOLANA_RPC_TEST_RETRY_DELAY"); value != "" {
+		delay, err := time.ParseDuration(value)
+		if err == nil {
+			return delay
+		}
+	}
+	return defaultPublicRPCRetryDelay
+}
+
+func isPublicRPCRateLimit(err error) bool {
+	return err != nil && strings.Contains(err.Error(), "429")
+}
+
+func retryPublicRPCCall[T any](t *testing.T, name string, call func() (T, error)) (T, error) {
+	t.Helper()
+
+	var result T
+	var err error
+	for attempt := 1; attempt <= defaultPublicRPCRetries; attempt++ {
+		throttlePublicRPC(t)
+		result, err = call()
+		if !isPublicRPCRateLimit(err) {
+			return result, err
+		}
+		if attempt < defaultPublicRPCRetries {
+			time.Sleep(publicRPCRetryDelay())
+		}
+	}
+
+	t.Skipf("%s rate limited by public RPC endpoint after retries: %v", name, err)
+	return result, err
+}
+
 func throttlePublicRPC(t *testing.T) {
 	t.Helper()
 	delay := publicRPCDelay()
@@ -62,13 +97,11 @@ func throttlePublicRPC(t *testing.T) {
 	publicRPCTestThrottle.Lock()
 	defer publicRPCTestThrottle.Unlock()
 
-	if !publicRPCTestThrottle.last.IsZero() {
-		wait := delay - time.Since(publicRPCTestThrottle.last)
-		if wait > 0 {
-			time.Sleep(wait)
-		}
+	now := time.Now()
+	if wait := publicRPCTestThrottle.last.Sub(now); wait > 0 {
+		time.Sleep(wait)
 	}
-	publicRPCTestThrottle.last = time.Now()
+	publicRPCTestThrottle.last = time.Now().Add(delay)
 }
 
 func newPublicHTTPClient(t *testing.T) *Client {
@@ -98,14 +131,14 @@ func newPublicWSClient(t *testing.T, ctx context.Context) *Client {
 	return raw.WS()
 }
 
-func requireRaw(t *testing.T, name string, values ...any) types.RawResult {
+func requireRaw(t *testing.T, name string, values ...any) model.RawResult {
 	t.Helper()
 	if len(values) != 2 {
 		t.Fatalf("%s: expected raw result and error, got %d values", name, len(values))
 	}
-	raw, ok := values[0].(types.RawResult)
+	raw, ok := values[0].(model.RawResult)
 	if !ok {
-		t.Fatalf("%s: expected types.RawResult, got %T", name, values[0])
+		t.Fatalf("%s: expected model.RawResult, got %T", name, values[0])
 	}
 	err, ok := values[1].(error)
 	if values[1] != nil && !ok {
@@ -120,27 +153,21 @@ func requireRaw(t *testing.T, name string, values ...any) types.RawResult {
 	return raw
 }
 
-func requireRawCall(t *testing.T, name string, call func() (types.RawResult, error)) types.RawResult {
+func requireRawCall(t *testing.T, name string, call func() (model.RawResult, error)) model.RawResult {
 	t.Helper()
-	throttlePublicRPC(t)
-	raw, err := call()
+	raw, err := retryPublicRPCCall(t, name, call)
 	return requireRaw(t, name, raw, err)
 }
 
-func requirePublicRawCall(t *testing.T, name string, call func() (types.RawResult, error)) types.RawResult {
+func requirePublicRawCall(t *testing.T, name string, call func() (model.RawResult, error)) model.RawResult {
 	t.Helper()
-	throttlePublicRPC(t)
-	raw, err := call()
-	if err != nil && strings.Contains(err.Error(), "429") {
-		t.Skipf("%s rate limited by public RPC endpoint: %v", name, err)
-	}
+	raw, err := retryPublicRPCCall(t, name, call)
 	return requireRaw(t, name, raw, err)
 }
 
-func requirePublicSlotCall(t *testing.T, name string, call func() (types.Slot, error)) types.Slot {
+func requirePublicSlotCall(t *testing.T, name string, call func() (model.Slot, error)) model.Slot {
 	t.Helper()
-	throttlePublicRPC(t)
-	slot, err := call()
+	slot, err := retryPublicRPCCall(t, name, call)
 	if err != nil {
 		t.Fatalf("%s: %v", name, err)
 	}
@@ -150,10 +177,9 @@ func requirePublicSlotCall(t *testing.T, name string, call func() (types.Slot, e
 	return slot
 }
 
-func requirePublicSlotLeadersCall(t *testing.T, name string, call func() (types.SlotLeaders, error)) types.SlotLeaders {
+func requirePublicSlotLeadersCall(t *testing.T, name string, call func() (model.SlotLeaders, error)) model.SlotLeaders {
 	t.Helper()
-	throttlePublicRPC(t)
-	leaders, err := call()
+	leaders, err := retryPublicRPCCall(t, name, call)
 	if err != nil {
 		t.Fatalf("%s: %v", name, err)
 	}
@@ -163,10 +189,9 @@ func requirePublicSlotLeadersCall(t *testing.T, name string, call func() (types.
 	return leaders
 }
 
-func requirePublicConfirmedSlotsCall(t *testing.T, name string, call func() (types.ConfirmedSlots, error)) types.ConfirmedSlots {
+func requirePublicConfirmedSlotsCall(t *testing.T, name string, call func() (model.ConfirmedSlots, error)) model.ConfirmedSlots {
 	t.Helper()
-	throttlePublicRPC(t)
-	slots, err := call()
+	slots, err := retryPublicRPCCall(t, name, call)
 	if err != nil {
 		t.Fatalf("%s: %v", name, err)
 	}
@@ -254,12 +279,12 @@ func TestNewRawClient_NoValidResources(t *testing.T) {
 func TestPublicRPC_HealthAndVersion(t *testing.T) {
 	client := newPublicHTTPClient(t)
 
-	health := requireRawCall(t, "GetHealth", func() (types.RawResult, error) { return client.GetHealth(context.Background()) })
+	health := requireRawCall(t, "GetHealth", func() (model.RawResult, error) { return client.GetHealth(context.Background()) })
 	if string(health) != `"ok"` {
 		t.Fatalf("unexpected health result: %s", health)
 	}
 
-	versionRaw := requireRawCall(t, "GetVersion", func() (types.RawResult, error) { return client.GetVersion(context.Background()) })
+	versionRaw := requireRawCall(t, "GetVersion", func() (model.RawResult, error) { return client.GetVersion(context.Background()) })
 	var version model.Version
 	if err := json.Unmarshal(versionRaw, &version); err != nil {
 		t.Fatalf("unmarshal version: %v", err)
@@ -268,7 +293,7 @@ func TestPublicRPC_HealthAndVersion(t *testing.T) {
 		t.Fatalf("missing solana-core in version: %s", versionRaw)
 	}
 
-	identityRaw := requireRawCall(t, "GetIdentity", func() (types.RawResult, error) { return client.GetIdentity(context.Background()) })
+	identityRaw := requireRawCall(t, "GetIdentity", func() (model.RawResult, error) { return client.GetIdentity(context.Background()) })
 	var identity model.Identity
 	if err := json.Unmarshal(identityRaw, &identity); err != nil {
 		t.Fatalf("unmarshal identity: %v", err)
@@ -281,12 +306,12 @@ func TestPublicRPC_HealthAndVersion(t *testing.T) {
 func TestPublicRPC_SlotAndEpochMethods(t *testing.T) {
 	client := newPublicHTTPClient(t)
 
-	slot := requirePublicSlotCall(t, "GetSlot", func() (types.Slot, error) {
-		return client.GetSlot(context.Background(), ConfirmedCommitment)
+	slot := requirePublicSlotCall(t, "GetSlot", func() (model.Slot, error) {
+		return client.GetSlot(context.Background(), GetSlotQuery{Commitment: model.ConfirmedCommitment})
 	})
 
-	blockHeight := requireRawCall(t, "GetBlockHeight", func() (types.RawResult, error) {
-		return client.GetBlockHeight(context.Background(), ConfirmedCommitment)
+	blockHeight := requireRawCall(t, "GetBlockHeight", func() (model.RawResult, error) {
+		return client.GetBlockHeight(context.Background(), GetBlockHeightQuery{Commitment: model.ConfirmedCommitment})
 	})
 	var height uint64
 	if err := json.Unmarshal(blockHeight, &height); err != nil {
@@ -296,8 +321,8 @@ func TestPublicRPC_SlotAndEpochMethods(t *testing.T) {
 		t.Fatal("GetBlockHeight returned zero")
 	}
 
-	epochRaw := requireRawCall(t, "GetEpochInfo", func() (types.RawResult, error) {
-		return client.GetEpochInfo(context.Background(), ConfirmedCommitment)
+	epochRaw := requireRawCall(t, "GetEpochInfo", func() (model.RawResult, error) {
+		return client.GetEpochInfo(context.Background(), GetEpochInfoQuery{Commitment: model.ConfirmedCommitment})
 	})
 	var epoch model.EpochInfo
 	if err := json.Unmarshal(epochRaw, &epoch); err != nil {
@@ -307,41 +332,41 @@ func TestPublicRPC_SlotAndEpochMethods(t *testing.T) {
 		t.Fatalf("invalid epoch info: %s", epochRaw)
 	}
 
-	leaders := requirePublicSlotLeadersCall(t, "GetSlotLeaders", func() (types.SlotLeaders, error) {
-		return client.GetSlotLeaders(context.Background(), slot, 2)
+	leaders := requirePublicSlotLeadersCall(t, "GetSlotLeaders", func() (model.SlotLeaders, error) {
+		return client.GetSlotLeaders(context.Background(), GetSlotLeadersQuery{From: slot, Limit: 2})
 	})
 	if len(leaders) != 2 {
 		t.Fatalf("expected 2 slot leaders, got %d", len(leaders))
 	}
 
-	requireRawCall(t, "GetSlotLeader", func() (types.RawResult, error) {
-		return client.GetSlotLeader(context.Background(), ConfirmedCommitment)
+	requireRawCall(t, "GetSlotLeader", func() (model.RawResult, error) {
+		return client.GetSlotLeader(context.Background(), GetSlotLeaderQuery{Commitment: model.ConfirmedCommitment})
 	})
-	requireRawCall(t, "GetEpochSchedule", func() (types.RawResult, error) { return client.GetEpochSchedule(context.Background()) })
+	requireRawCall(t, "GetEpochSchedule", func() (model.RawResult, error) { return client.GetEpochSchedule(context.Background()) })
 }
 
 func TestPublicRPC_BlockAndLedgerMethods(t *testing.T) {
 	client := newPublicHTTPClient(t)
 
-	slot := requirePublicSlotCall(t, "GetSlot", func() (types.Slot, error) {
-		return client.GetSlot(context.Background(), ConfirmedCommitment)
+	slot := requirePublicSlotCall(t, "GetSlot", func() (model.Slot, error) {
+		return client.GetSlot(context.Background(), GetSlotQuery{Commitment: model.ConfirmedCommitment})
 	})
 	if slot < 10 {
 		t.Fatalf("unexpected small slot: %d", slot)
 	}
 
-	requireRawCall(t, "GetFirstAvailableBlock", func() (types.RawResult, error) { return client.GetFirstAvailableBlock(context.Background()) })
-	requireRawCall(t, "MinimumLedgerSlot", func() (types.RawResult, error) { return client.MinimumLedgerSlot(context.Background()) })
-	requireRawCall(t, "GetMaxRetransmitSlot", func() (types.RawResult, error) { return client.GetMaxRetransmitSlot(context.Background()) })
-	requireRawCall(t, "GetMaxShredInsertSlot", func() (types.RawResult, error) { return client.GetMaxShredInsertSlot(context.Background()) })
-	requireRawCall(t, "GetRecentPerformanceSamples", func() (types.RawResult, error) {
-		return client.GetRecentPerformanceSamples(context.Background(), 1)
+	requireRawCall(t, "GetFirstAvailableBlock", func() (model.RawResult, error) { return client.GetFirstAvailableBlock(context.Background()) })
+	requireRawCall(t, "MinimumLedgerSlot", func() (model.RawResult, error) { return client.MinimumLedgerSlot(context.Background()) })
+	requireRawCall(t, "GetMaxRetransmitSlot", func() (model.RawResult, error) { return client.GetMaxRetransmitSlot(context.Background()) })
+	requireRawCall(t, "GetMaxShredInsertSlot", func() (model.RawResult, error) { return client.GetMaxShredInsertSlot(context.Background()) })
+	requireRawCall(t, "GetRecentPerformanceSamples", func() (model.RawResult, error) {
+		return client.GetRecentPerformanceSamples(context.Background(), GetRecentPerformanceSamplesQuery{Limit: 1})
 	})
 
-	blocksRaw := requireRawCall(t, "GetBlocksWithLimit", func() (types.RawResult, error) {
-		return client.GetBlocksWithLimit(context.Background(), slot-10, 2, ConfirmedCommitment)
+	blocksRaw := requireRawCall(t, "GetBlocksWithLimit", func() (model.RawResult, error) {
+		return client.GetBlocksWithLimit(context.Background(), GetBlocksWithLimitQuery{StartSlot: slot - 10, Limit: 2, Commitment: model.ConfirmedCommitment})
 	})
-	var blocks []types.Slot
+	var blocks []model.Slot
 	if err := json.Unmarshal(blocksRaw, &blocks); err != nil {
 		t.Fatalf("unmarshal blocks: %v", err)
 	}
@@ -349,34 +374,31 @@ func TestPublicRPC_BlockAndLedgerMethods(t *testing.T) {
 		t.Fatalf("GetBlocksWithLimit returned no blocks near slot %d", slot)
 	}
 
-	confirmed := requirePublicConfirmedSlotsCall(t, "GetConfirmedSlots", func() (types.ConfirmedSlots, error) {
-		return client.GetConfirmedSlots(context.Background(), slot-10, slot, ConfirmedCommitment)
+	confirmed := requirePublicConfirmedSlotsCall(t, "GetConfirmedSlots", func() (model.ConfirmedSlots, error) {
+		return client.GetConfirmedSlots(context.Background(), GetConfirmedSlotsQuery{From: slot - 10, To: slot, Commitment: model.ConfirmedCommitment})
 	})
 
-	requireRawCall(t, "GetBlockCommitment", func() (types.RawResult, error) {
-		return client.GetBlockCommitment(context.Background(), confirmed[len(confirmed)-1])
+	requireRawCall(t, "GetBlockCommitment", func() (model.RawResult, error) {
+		return client.GetBlockCommitment(context.Background(), SlotQuery{Slot: confirmed[len(confirmed)-1]})
 	})
-	requireRawCall(t, "GetBlockTime", func() (types.RawResult, error) {
-		return client.GetBlockTime(context.Background(), confirmed[len(confirmed)-1])
+	requireRawCall(t, "GetBlockTime", func() (model.RawResult, error) {
+		return client.GetBlockTime(context.Background(), SlotQuery{Slot: confirmed[len(confirmed)-1]})
 	})
 }
 
 func TestPublicRPC_AccountMethods(t *testing.T) {
 	client := newPublicHTTPClient(t)
 
-	balanceRaw := requireRawCall(t, "GetBalance", func() (types.RawResult, error) {
-		return client.GetBalance(context.Background(), systemProgramID, map[string]string{"commitment": string(ConfirmedCommitment)})
+	balanceRaw := requireRawCall(t, "GetBalance", func() (model.RawResult, error) {
+		return client.GetBalance(context.Background(), GetBalanceQuery{Pubkey: systemProgramID, Commitment: model.ConfirmedCommitment})
 	})
 	var balance model.Balance
 	if err := json.Unmarshal(balanceRaw, &balance); err != nil {
 		t.Fatalf("unmarshal balance: %v", err)
 	}
 
-	accountRaw := requireRawCall(t, "GetAccountInfo", func() (types.RawResult, error) {
-		return client.GetAccountInfo(context.Background(), systemProgramID, map[string]string{
-			"encoding":   "base64",
-			"commitment": string(ConfirmedCommitment),
-		})
+	accountRaw := requireRawCall(t, "GetAccountInfo", func() (model.RawResult, error) {
+		return client.GetAccountInfo(context.Background(), GetAccountInfoQuery{Pubkey: systemProgramID, Encoding: EncodingBase64, Commitment: model.ConfirmedCommitment})
 	})
 	var account model.AccountInfo
 	if err := json.Unmarshal(accountRaw, &account); err != nil {
@@ -386,11 +408,8 @@ func TestPublicRPC_AccountMethods(t *testing.T) {
 		t.Fatalf("system program account not found: %s", accountRaw)
 	}
 
-	multipleRaw := requireRawCall(t, "GetMultipleAccounts", func() (types.RawResult, error) {
-		return client.GetMultipleAccounts(context.Background(), []string{systemProgramID}, map[string]string{
-			"encoding":   "base64",
-			"commitment": string(ConfirmedCommitment),
-		})
+	multipleRaw := requireRawCall(t, "GetMultipleAccounts", func() (model.RawResult, error) {
+		return client.GetMultipleAccounts(context.Background(), GetMultipleAccountsQuery{Pubkeys: []string{systemProgramID}, Encoding: EncodingBase64, Commitment: model.ConfirmedCommitment})
 	})
 	var multiple model.MultipleAccounts
 	if err := json.Unmarshal(multipleRaw, &multiple); err != nil {
@@ -400,21 +419,21 @@ func TestPublicRPC_AccountMethods(t *testing.T) {
 		t.Fatalf("unexpected multiple account result: %s", multipleRaw)
 	}
 
-	requirePublicRawCall(t, "GetLargestAccounts", func() (types.RawResult, error) {
-		return client.GetLargestAccounts(context.Background(), map[string]string{"commitment": string(ConfirmedCommitment)})
+	requirePublicRawCall(t, "GetLargestAccounts", func() (model.RawResult, error) {
+		return client.GetLargestAccounts(context.Background(), GetLargestAccountsQuery{Commitment: model.ConfirmedCommitment})
 	})
-	requireRawCall(t, "GetMinimumBalanceForRentExemption", func() (types.RawResult, error) {
-		return client.GetMinimumBalanceForRentExemption(context.Background(), 0, ConfirmedCommitment)
+	requireRawCall(t, "GetMinimumBalanceForRentExemption", func() (model.RawResult, error) {
+		return client.GetMinimumBalanceForRentExemption(context.Background(), GetMinimumBalanceForRentExemptionQuery{DataSize: 0, Commitment: model.ConfirmedCommitment})
 	})
 }
 
 func TestPublicRPC_TokenAndSupplyMethods(t *testing.T) {
 	client := newPublicHTTPClient(t)
 
-	supplyRaw := requireRawCall(t, "GetSupply", func() (types.RawResult, error) {
-		return client.GetSupply(context.Background(), map[string]any{
-			"commitment":                        ConfirmedCommitment,
-			"excludeNonCirculatingAccountsList": true,
+	supplyRaw := requireRawCall(t, "GetSupply", func() (model.RawResult, error) {
+		return client.GetSupply(context.Background(), GetSupplyQuery{
+			Commitment:                        model.ConfirmedCommitment,
+			ExcludeNonCirculatingAccountsList: true,
 		})
 	})
 	var supply model.Supply
@@ -425,8 +444,8 @@ func TestPublicRPC_TokenAndSupplyMethods(t *testing.T) {
 		t.Fatalf("invalid supply: %s", supplyRaw)
 	}
 
-	tokenSupplyRaw := requireRawCall(t, "GetTokenSupply", func() (types.RawResult, error) {
-		return client.GetTokenSupply(context.Background(), wrappedSOLMint, ConfirmedCommitment)
+	tokenSupplyRaw := requireRawCall(t, "GetTokenSupply", func() (model.RawResult, error) {
+		return client.GetTokenSupply(context.Background(), GetTokenSupplyQuery{Mint: wrappedSOLMint, Commitment: model.ConfirmedCommitment})
 	})
 	var tokenSupply model.TokenSupply
 	if err := json.Unmarshal(tokenSupplyRaw, &tokenSupply); err != nil {
@@ -436,19 +455,19 @@ func TestPublicRPC_TokenAndSupplyMethods(t *testing.T) {
 		t.Fatalf("missing token supply amount: %s", tokenSupplyRaw)
 	}
 
-	requirePublicRawCall(t, "GetTokenLargestAccounts", func() (types.RawResult, error) {
-		return client.GetTokenLargestAccounts(context.Background(), wrappedSOLMint, ConfirmedCommitment)
+	requirePublicRawCall(t, "GetTokenLargestAccounts", func() (model.RawResult, error) {
+		return client.GetTokenLargestAccounts(context.Background(), GetTokenLargestAccountsQuery{Mint: wrappedSOLMint, Commitment: model.ConfirmedCommitment})
 	})
-	requireRawCall(t, "GetStakeMinimumDelegation", func() (types.RawResult, error) {
-		return client.GetStakeMinimumDelegation(context.Background(), ConfirmedCommitment)
+	requireRawCall(t, "GetStakeMinimumDelegation", func() (model.RawResult, error) {
+		return client.GetStakeMinimumDelegation(context.Background(), GetStakeMinimumDelegationQuery{Commitment: model.ConfirmedCommitment})
 	})
 }
 
 func TestPublicRPC_BlockhashAndTransactionLookupMethods(t *testing.T) {
 	client := newPublicHTTPClient(t)
 
-	blockhashRaw := requireRawCall(t, "GetLatestBlockhash", func() (types.RawResult, error) {
-		return client.GetLatestBlockhash(context.Background(), ConfirmedCommitment)
+	blockhashRaw := requireRawCall(t, "GetLatestBlockhash", func() (model.RawResult, error) {
+		return client.GetLatestBlockhash(context.Background(), GetLatestBlockhashQuery{Commitment: model.ConfirmedCommitment})
 	})
 	var blockhash model.LatestBlockhash
 	if err := json.Unmarshal(blockhashRaw, &blockhash); err != nil {
@@ -458,8 +477,8 @@ func TestPublicRPC_BlockhashAndTransactionLookupMethods(t *testing.T) {
 		t.Fatalf("missing blockhash: %s", blockhashRaw)
 	}
 
-	validRaw := requireRawCall(t, "IsBlockhashValid", func() (types.RawResult, error) {
-		return client.IsBlockhashValid(context.Background(), blockhash.Value.Blockhash, ConfirmedCommitment)
+	validRaw := requireRawCall(t, "IsBlockhashValid", func() (model.RawResult, error) {
+		return client.IsBlockhashValid(context.Background(), IsBlockhashValidQuery{Blockhash: blockhash.Value.Blockhash, Commitment: model.ConfirmedCommitment})
 	})
 	var valid model.BlockhashValid
 	if err := json.Unmarshal(validRaw, &valid); err != nil {
@@ -469,24 +488,21 @@ func TestPublicRPC_BlockhashAndTransactionLookupMethods(t *testing.T) {
 		t.Fatalf("fresh blockhash reported invalid: %s", validRaw)
 	}
 
-	requireRawCall(t, "GetRecentPrioritizationFees", func() (types.RawResult, error) {
-		return client.GetRecentPrioritizationFees(context.Background())
+	requireRawCall(t, "GetRecentPrioritizationFees", func() (model.RawResult, error) {
+		return client.GetRecentPrioritizationFees(context.Background(), GetRecentPrioritizationFeesQuery{})
 	})
-	requireRawCall(t, "GetTransactionCount", func() (types.RawResult, error) {
-		return client.GetTransactionCount(context.Background(), ConfirmedCommitment)
+	requireRawCall(t, "GetTransactionCount", func() (model.RawResult, error) {
+		return client.GetTransactionCount(context.Background(), GetTransactionCountQuery{Commitment: model.ConfirmedCommitment})
 	})
-	requireRawCall(t, "GetSignaturesForAddress", func() (types.RawResult, error) {
-		return client.GetSignaturesForAddress(context.Background(), systemProgramID, map[string]any{
-			"limit":      1,
-			"commitment": ConfirmedCommitment,
-		})
+	requireRawCall(t, "GetSignaturesForAddress", func() (model.RawResult, error) {
+		return client.GetSignaturesForAddress(context.Background(), GetSignaturesForAddressQuery{Address: systemProgramID, Limit: 1, Commitment: model.ConfirmedCommitment})
 	})
 }
 
 func TestPublicRPC_ClusterAndValidatorMethods(t *testing.T) {
 	client := newPublicHTTPClient(t)
 
-	nodesRaw := requireRawCall(t, "GetClusterNodes", func() (types.RawResult, error) { return client.GetClusterNodes(context.Background()) })
+	nodesRaw := requireRawCall(t, "GetClusterNodes", func() (model.RawResult, error) { return client.GetClusterNodes(context.Background()) })
 	var nodes model.ClusterNodes
 	if err := json.Unmarshal(nodesRaw, &nodes); err != nil {
 		t.Fatalf("unmarshal cluster nodes: %v", err)
@@ -495,7 +511,7 @@ func TestPublicRPC_ClusterAndValidatorMethods(t *testing.T) {
 		t.Fatalf("GetClusterNodes returned no nodes")
 	}
 
-	voteRaw := requireRawCall(t, "GetVoteAccounts", func() (types.RawResult, error) { return client.GetVoteAccounts(context.Background()) })
+	voteRaw := requireRawCall(t, "GetVoteAccounts", func() (model.RawResult, error) { return client.GetVoteAccounts(context.Background()) })
 	var voteAccounts model.VoteAccounts
 	if err := json.Unmarshal(voteRaw, &voteAccounts); err != nil {
 		t.Fatalf("unmarshal vote accounts: %v", err)
@@ -504,12 +520,12 @@ func TestPublicRPC_ClusterAndValidatorMethods(t *testing.T) {
 		t.Fatalf("GetVoteAccounts returned no current accounts")
 	}
 
-	requireRawCall(t, "GetInflationGovernor", func() (types.RawResult, error) {
-		return client.GetInflationGovernor(context.Background(), ConfirmedCommitment)
+	requireRawCall(t, "GetInflationGovernor", func() (model.RawResult, error) {
+		return client.GetInflationGovernor(context.Background(), GetInflationGovernorQuery{Commitment: model.ConfirmedCommitment})
 	})
-	requireRawCall(t, "GetInflationRate", func() (types.RawResult, error) { return client.GetInflationRate(context.Background()) })
-	requireRawCall(t, "GetLeaderSchedule", func() (types.RawResult, error) {
-		return client.GetLeaderSchedule(context.Background(), nil, map[string]string{"commitment": string(ConfirmedCommitment)})
+	requireRawCall(t, "GetInflationRate", func() (model.RawResult, error) { return client.GetInflationRate(context.Background()) })
+	requireRawCall(t, "GetLeaderSchedule", func() (model.RawResult, error) {
+		return client.GetLeaderSchedule(context.Background(), GetLeaderScheduleQuery{Commitment: model.ConfirmedCommitment})
 	})
 }
 

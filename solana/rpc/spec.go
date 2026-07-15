@@ -1,36 +1,13 @@
 package rpc
 
 import (
-	"time"
+	"encoding/json"
+	"fmt"
 
-	"github.com/0x626f/ingress/solana/types"
+	"github.com/0x626f/ingress/jsonrpc"
 )
 
 const (
-	// SupportedJsonRpcVersion is the JSON-RPC protocol version supported by this rpc
-	SupportedJsonRpcVersion = "2.0"
-
-	// DefaultSlotWindow is the default time window for slot updates on Solana
-	DefaultSlotWindow = 400 * time.Millisecond
-
-	// ProcessedCommitment represents the processed commitment level - the node has processed
-	// the transaction but it has not been confirmed by the cluster
-	ProcessedCommitment types.Commitment = "processed"
-
-	// ConfirmedCommitment represents the confirmed commitment level - the transaction
-	// has been confirmed by the cluster with maximum lockout
-	ConfirmedCommitment types.Commitment = "confirmed"
-
-	// FinalizedCommitment represents the finalized commitment level - the transaction
-	// has been finalized by the cluster and cannot be rolled back
-	FinalizedCommitment types.Commitment = "finalized"
-
-	// MaxSlotLeadersRange is the maximum number of slot leaders that can be requested in a single call
-	MaxSlotLeadersRange uint16 = 5000
-
-	// MinSlotLeadersRange is the minimum number of slot leaders that can be requested
-	MinSlotLeadersRange = 1
-
 	RPCMethodGetAccountInfo                    = "getAccountInfo"
 	RPCMethodGetBalance                        = "getBalance"
 	RPCMethodGetLargestAccounts                = "getLargestAccounts"
@@ -102,3 +79,58 @@ const (
 	RPCMethodVoteSubscribe                     = "voteSubscribe"
 	RPCMethodVoteUnsubscribe                   = "voteUnsubscribe"
 )
+
+type APISpec struct{}
+
+type APIError = jsonrpc.Error
+
+type MessageId = jsonrpc.MessageID
+
+func (spec APISpec) BuildQuery(id uint, method string, params []any) ([]byte, error) {
+	return jsonrpc.BuildRequest(id, method, params)
+}
+
+func (spec APISpec) ParseResponse(response []byte) ([]byte, error) {
+	return jsonrpc.ParseRawResult(response)
+}
+
+func (spec APISpec) ParseSubscriptionResponse(request []byte) ([]byte, error) {
+	return jsonrpc.ParseSubscriptionResult(request)
+}
+
+func (spec APISpec) ParseMessageId(response []byte) (MessageId, error) {
+	var summary struct {
+		ID     uint `json:"id,omitempty"`
+		Params struct {
+			Subscription json.RawMessage `json:"subscription,omitempty"`
+		} `json:"params,omitempty"`
+	}
+
+	if err := json.Unmarshal(response, &summary); err != nil {
+		return MessageId{}, err
+	}
+
+	if len(summary.Params.Subscription) == 0 {
+		return MessageId{ID: summary.ID}, nil
+	}
+
+	var number uint64
+	if err := json.Unmarshal(summary.Params.Subscription, &number); err == nil {
+		return MessageId{ID: summary.ID, Subscription: fmt.Sprint(number)}, nil
+	}
+
+	var text string
+	if err := json.Unmarshal(summary.Params.Subscription, &text); err == nil {
+		return MessageId{ID: summary.ID, Subscription: text}, nil
+	}
+
+	return MessageId{ID: summary.ID}, nil
+}
+
+func (spec APISpec) BuildMethodCall(method string, params *QueryParams) ([]byte, error) {
+	if params == nil {
+		params = DefaultQueryParams()
+	}
+	params.Adjust()
+	return spec.BuildQuery(params.Id, method, params.Params)
+}

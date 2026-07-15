@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/0x626f/ingress/solana/types"
+	"github.com/0x626f/ingress/solana/model"
 )
 
 type proxyTestContextKey string
@@ -44,11 +44,11 @@ func TestProxyClient_ContextFactoryUsedForNilContext(t *testing.T) {
 		},
 	})
 
-	result, err := proxy.raw(nil, "GetHealth", nil, func(ctx context.Context) (types.RawResult, error) {
+	result, err := proxy.raw(nil, "GetHealth", nil, func(ctx context.Context) (model.RawResult, error) {
 		if ctx != factoryCtx {
 			t.Fatal("proxied call did not receive factory context")
 		}
-		return types.RawResult("ok"), nil
+		return model.RawResult("ok"), nil
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -88,7 +88,7 @@ func TestProxyClient_HooksWrapCall(t *testing.T) {
 			if !reflect.DeepEqual(gotQuery, query) {
 				t.Fatalf("unexpected postprocess query: %#v", gotQuery)
 			}
-			if string(result.(types.RawResult)) != "ok" {
+			if string(result.(model.RawResult)) != "ok" {
 				t.Fatalf("unexpected postprocess result: %v", result)
 			}
 			if err != nil {
@@ -99,9 +99,9 @@ func TestProxyClient_HooksWrapCall(t *testing.T) {
 		},
 	})
 
-	result, err := proxy.raw(ctx, "GetBalance", query, func(ctx context.Context) (types.RawResult, error) {
+	result, err := proxy.raw(ctx, "GetBalance", query, func(ctx context.Context) (model.RawResult, error) {
 		order = append(order, "call")
-		return types.RawResult("ok"), nil
+		return model.RawResult("ok"), nil
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -129,9 +129,9 @@ func TestProxyClient_PreprocessErrorSkipsCallAndPostprocess(t *testing.T) {
 		},
 	})
 
-	result, err := proxy.raw(context.Background(), "GetHealth", nil, func(ctx context.Context) (types.RawResult, error) {
+	result, err := proxy.raw(context.Background(), "GetHealth", nil, func(ctx context.Context) (model.RawResult, error) {
 		called.Store(true)
-		return types.RawResult("ok"), nil
+		return model.RawResult("ok"), nil
 	})
 	if !errors.Is(err, preErr) {
 		t.Fatalf("expected preprocess error, got %v", err)
@@ -153,8 +153,8 @@ func TestProxyClient_PostprocessErrorOverridesSuccessfulCall(t *testing.T) {
 		},
 	})
 
-	result, err := proxy.raw(context.Background(), "GetHealth", nil, func(ctx context.Context) (types.RawResult, error) {
-		return types.RawResult("ok"), nil
+	result, err := proxy.raw(context.Background(), "GetHealth", nil, func(ctx context.Context) (model.RawResult, error) {
+		return model.RawResult("ok"), nil
 	})
 	if !errors.Is(err, postErr) {
 		t.Fatalf("expected postprocess error, got %v", err)
@@ -177,12 +177,12 @@ func TestProxyClient_InflightCacheCoalescesIdenticalCalls(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			result, err := proxy.raw(context.Background(), "GetHealth", nil, func(ctx context.Context) (types.RawResult, error) {
+			result, err := proxy.raw(context.Background(), "GetHealth", nil, func(ctx context.Context) (model.RawResult, error) {
 				if calls.Add(1) == 1 {
 					close(started)
 				}
 				<-release
-				return types.RawResult("ok"), nil
+				return model.RawResult("ok"), nil
 			})
 			if err != nil {
 				t.Errorf("proxy call failed: %v", err)

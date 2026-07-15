@@ -1,16 +1,54 @@
 // Package model provides typed response structures for Solana JSON-RPC calls.
 package model
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"time"
+)
 
 // Commitment represents the commitment level for Solana RPC requests.
 type Commitment = string
+
+const (
+	// SupportedJsonRpcVersion is the JSON-RPC protocol version supported by this rpc.
+	SupportedJsonRpcVersion = "2.0"
+
+	// DefaultSlotWindow is the default time window for slot updates on Solana.
+	DefaultSlotWindow = 400 * time.Millisecond
+
+	// ProcessedCommitment means the node has processed the transaction but it
+	// has not been confirmed by the cluster.
+	ProcessedCommitment Commitment = "processed"
+
+	// ConfirmedCommitment means the transaction has been confirmed by the
+	// cluster with maximum lockout.
+	ConfirmedCommitment Commitment = "confirmed"
+
+	// FinalizedCommitment means the transaction has been finalized and cannot
+	// be rolled back.
+	FinalizedCommitment Commitment = "finalized"
+
+	// MaxSlotLeadersRange is the maximum number of slot leaders per request.
+	MaxSlotLeadersRange uint16 = 5000
+
+	// MinSlotLeadersRange is the minimum number of slot leaders per request.
+	MinSlotLeadersRange = 1
+)
 
 // RawResult represents raw JSON response data from RPC calls.
 type RawResult []byte
 
 // Slot represents a Solana slot number.
 type Slot = uint64
+
+// SlotLeaders represents validator public keys scheduled to produce consecutive slots.
+type SlotLeaders = []string
+
+// SlotLeaderTPUAddress represents a validator TPU endpoint address.
+type SlotLeaderTPUAddress = string
+
+// ConfirmedSlots represents a collection of confirmed slot numbers.
+type ConfirmedSlots = []Slot
 
 // UnixTimestamp is a Unix timestamp in seconds.
 type UnixTimestamp = int64
@@ -249,6 +287,14 @@ type EpochInfo struct {
 	TransactionCount uint64 `json:"transactionCount,omitempty"`
 }
 
+func (info *EpochInfo) CalculateUtilization(slot Slot) float64 {
+	return float64(slot-info.EpochStartSlot()) / float64(info.SlotsInEpoch)
+}
+
+func (info *EpochInfo) EpochStartSlot() Slot {
+	return info.AbsoluteSlot - info.SlotIndex
+}
+
 // EpochSchedule describes Solana epoch scheduling.
 type EpochSchedule struct {
 	SlotsPerEpoch            uint64 `json:"slotsPerEpoch"`
@@ -286,6 +332,24 @@ type ClusterNode struct {
 
 // ClusterNodes is the result of getClusterNodes.
 type ClusterNodes []ClusterNode
+
+// TPUQuick represents a validator's TPU QUIC endpoint information.
+type TPUQuick struct {
+	Pubkey string  `json:"pubkey"`
+	URL    *string `json:"tpuQuic,omitempty"`
+}
+
+// ShortTransactionInfo contains basic transaction timing and slot information.
+type ShortTransactionInfo struct {
+	BlockTime UnixTimestamp `json:"blockTime"`
+	Slot      Slot          `json:"slot"`
+}
+
+// ShortBlock contains basic block hash and parent slot information.
+type ShortBlock struct {
+	Hash       string `json:"blockhash"`
+	ParentSlot Slot   `json:"parentSlot"`
+}
 
 // Version is the result of getVersion.
 type Version struct {
