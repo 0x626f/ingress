@@ -314,6 +314,15 @@ func currentBlockHex(t *testing.T, c *ThinClient) string {
 	return string(result)
 }
 
+func currentBlockNumber(t *testing.T, c *ThinClient) uint64 {
+	t.Helper()
+	val, err := strconv.ParseUint(strings.TrimPrefix(currentBlockHex(t, c), "0x"), 16, 64)
+	if err != nil {
+		t.Fatalf("BlockNumber (prerequisite): invalid hex block number: %v", err)
+	}
+	return val
+}
+
 func hexBlockMinus(hexBlock string, n uint64) string {
 	val, err := strconv.ParseUint(strings.TrimPrefix(hexBlock, "0x"), 16, 64)
 	if err != nil || val < n {
@@ -322,7 +331,18 @@ func hexBlockMinus(hexBlock string, n uint64) string {
 	return "0x" + strconv.FormatUint(val-n, 16)
 }
 
-// resolvedBlockHash returns the configured block hash or derives one from block 1.
+func recentConfirmedBlockNumber(t *testing.T, c *ThinClient) uint64 {
+	t.Helper()
+	const confirmations = 3
+	head := currentBlockNumber(t, c)
+	if head <= confirmations {
+		return head
+	}
+	return head - confirmations
+}
+
+// resolvedBlockHash returns the configured block hash or derives one from a
+// recent block so tests do not require archive access to historical state.
 // The result is the stripped inner content of the block object (outer {} removed
 // by ParseResponse), so we use extractStringField rather than json.Unmarshal.
 func resolvedBlockHash(t *testing.T, c *ThinClient, chain *chainConfig) string {
@@ -330,17 +350,21 @@ func resolvedBlockHash(t *testing.T, c *ThinClient, chain *chainConfig) string {
 	if h := chain.blockHash(); h != "" {
 		return h
 	}
-	result, err := c.GetBlockByNumber(context.Background(), BlockQuery{Number: "1"})
-	requireRPC(t, "GetBlockByNumber(1) for hash derivation", err)
+	block := recentConfirmedBlockNumber(t, c)
+	result, err := c.GetBlockByNumber(context.Background(), BlockQuery{
+		Number: strconv.FormatUint(block, 10),
+	})
+	requireRPC(t, "GetBlockByNumber(recent) for hash derivation", err)
 	h := extractStringField(result, "hash")
 	if h == "" {
-		t.Skip("cannot derive block hash from block 1")
+		t.Skipf("cannot derive block hash from recent block %d", block)
 	}
 	return h
 }
 
 // resolvedTxHash returns the configured tx hash or derives one from recent blocks.
-// Tries the last three blocks to tolerate transiently empty blocks.
+// It skips the chain head by a few confirmations and then scans backwards to
+// tolerate empty blocks without relying on old, possibly pruned history.
 // The result of GetBlockByNumber is stripped inner object content, so we use
 // firstTxHashFromBlock (string search) rather than json.Unmarshal.
 func resolvedTxHash(t *testing.T, c *ThinClient, chain *chainConfig) string {
@@ -348,11 +372,11 @@ func resolvedTxHash(t *testing.T, c *ThinClient, chain *chainConfig) string {
 	if h := chain.txHash(); h != "" {
 		return h
 	}
-	curHex := currentBlockHex(t, c)
-	for i := uint64(0); i < 3; i++ {
-		blockTag := hexBlockMinus(curHex, i)
+	start := recentConfirmedBlockNumber(t, c)
+	for i := uint64(0); i < 64 && start >= i; i++ {
+		block := start - i
 		result, err := c.GetBlockByNumber(context.Background(), BlockQuery{
-			OnBlockQuery:     OnBlockQuery{BlockTag: blockTag},
+			Number:           strconv.FormatUint(block, 10),
 			FullTransactions: true,
 		})
 		if err != nil {
@@ -362,7 +386,7 @@ func resolvedTxHash(t *testing.T, c *ThinClient, chain *chainConfig) string {
 			return h
 		}
 	}
-	t.Skipf("no transactions in last 3 blocks on %s", chain.Name)
+	t.Skipf("no transactions in recent blocks on %s", chain.Name)
 	return ""
 }
 
@@ -523,10 +547,13 @@ func TestIntegration_GetBlockByNumber_Latest(t *testing.T) {
 
 func TestIntegration_GetBlockByNumber_ByNumber(t *testing.T) {
 	forEachHTTPChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
-		result, err := c.GetBlockByNumber(context.Background(), BlockQuery{Number: "1"})
-		requireRPC(t, "GetBlockByNumber(1)", err)
-		assertNonEmpty(t, "GetBlockByNumber(1)", result)
-		t.Logf("GetBlockByNumber(1): %d bytes", len(result))
+		block := recentConfirmedBlockNumber(t, c)
+		result, err := c.GetBlockByNumber(context.Background(), BlockQuery{
+			Number: strconv.FormatUint(block, 10),
+		})
+		requireRPC(t, "GetBlockByNumber(recent)", err)
+		assertNonEmpty(t, "GetBlockByNumber(recent)", result)
+		t.Logf("GetBlockByNumber(%d): %d bytes", block, len(result))
 	})
 }
 

@@ -442,9 +442,7 @@ func (client *ThinClient) GetLogs(ctx context.Context, query LogsQuery) ([]byte,
 		rpcCallData["fromBlock"] = query.FromBlock
 	}
 
-	if query.ToBlock != "" {
-		rpcCallData["toBlock"] = query.ToBlock
-	}
+	rpcCallData["toBlock"] = getOrDefault(BlockTagLatest, query.ToBlock)
 
 	if query.Address != "" {
 		rpcCallData["address"] = query.Address
