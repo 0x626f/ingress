@@ -75,34 +75,41 @@ Requires Go 1.24+. Dependencies are intentionally small: `gobwas/ws` for WebSock
 package main
 
 import (
+	"context"
 	"fmt"
 	"time"
 
+	"github.com/0x626f/ingress"
 	"github.com/0x626f/ingress/evm/model"
 	"github.com/0x626f/ingress/evm/rpc"
 )
 
 func main() {
-	raw, err := rpc.NewRawClient(&rpc.ClientConfig{
-		Resources: []string{
-			"https://eth-mainnet.example.com",
-			"wss://eth-mainnet.example.com/ws",
+	if err := ingress.SetupEVM(&ingress.EVMPlatformConfig{
+		ClientConfig: rpc.ClientConfig{
+			Resources: []string{
+				"https://eth-mainnet.example.com",
+				"wss://eth-mainnet.example.com/ws",
+			},
+			RequestTimeout: 10 * time.Second,
 		},
-		RequestTimeout: 10 * time.Second,
-	})
-	if err != nil {
+		RPCProxyEnabled:  true,
+		RPCInflightCache: true,
+	}); err != nil {
 		panic(err)
 	}
 
-	http := raw.HTTP()
+	http := ingress.EVM.HTTP()
 
-	chainID, err := http.ChainId()
+	chainID, err := http.ChainId(context.Background())
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println("chain:", model.DecodeHex(chainID))
 
-	blockRaw, err := http.GetBlockByNumber(rpc.BlockQuery{FullTransactions: true})
+	blockRaw, err := http.GetBlockByNumber(context.Background(), rpc.BlockQuery{
+		FullTransactions: true,
+	})
 	if err != nil {
 		panic(err)
 	}
@@ -124,29 +131,34 @@ func main() {
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
 
+	"github.com/0x626f/ingress"
 	"github.com/0x626f/ingress/solana/model"
 	"github.com/0x626f/ingress/solana/rpc"
 )
 
 func main() {
-	raw, err := rpc.NewRawClient(&rpc.ClientConfig{
-		Resources: []string{
-			"https://api.mainnet-beta.solana.com",
-			"wss://api.mainnet-beta.solana.com",
+	if err := ingress.SetupSolana(&ingress.SolanaPlatformConfig{
+		ClientConfig: rpc.ClientConfig{
+			Resources: []string{
+				"https://api.mainnet-beta.solana.com",
+				"wss://api.mainnet-beta.solana.com",
+			},
+			RequestTimeout: 10 * time.Second,
 		},
-		RequestTimeout: 10 * time.Second,
-	})
-	if err != nil {
+		RPCProxyEnabled:  true,
+		RPCInflightCache: true,
+	}); err != nil {
 		panic(err)
 	}
 
-	http := raw.HTTP()
+	http := ingress.Solana.HTTP()
 
-	epochRaw, err := http.GetEpochInfo(rpc.FinalizedCommitment)
+	epochRaw, err := http.GetEpochInfo(context.Background(), rpc.FinalizedCommitment)
 	if err != nil {
 		panic(err)
 	}
@@ -157,7 +169,7 @@ func main() {
 	}
 	fmt.Println("epoch:", epoch.Epoch)
 
-	blockhashRaw, err := http.GetLatestBlockhash(rpc.FinalizedCommitment)
+	blockhashRaw, err := http.GetLatestBlockhash(context.Background(), rpc.FinalizedCommitment)
 	if err != nil {
 		panic(err)
 	}
@@ -172,7 +184,56 @@ func main() {
 
 ## Configuration
 
-Both EVM and Solana RPC packages expose a `ClientConfig` with the same core fields:
+For application-level setup, use the root `ingress` package. It stores configured
+platforms in `ingress.EVM` and `ingress.Solana`, and exposes `HTTP()`, `WS()`,
+and `RawClient()` accessors.
+
+```go
+import (
+	"context"
+	"time"
+
+	"github.com/0x626f/ingress"
+	evmrpc "github.com/0x626f/ingress/evm/rpc"
+)
+
+err := ingress.SetupEVM(&ingress.EVMPlatformConfig{
+	ClientConfig: evmrpc.ClientConfig{
+		Resources: []string{"https://...", "wss://..."},
+		RequestTimeout: 5 * time.Second,
+	},
+	RPCProxyEnabled:    true,
+	RPCInflightCache:   true,
+	RPCContextFactory:  func() context.Context { return context.Background() },
+	RPCPreprocessHook:  nil,
+	RPCPostProcessHook: nil,
+})
+```
+
+```go
+import (
+	"context"
+	"time"
+
+	"github.com/0x626f/ingress"
+	solanarpc "github.com/0x626f/ingress/solana/rpc"
+)
+
+err := ingress.SetupSolana(&ingress.SolanaPlatformConfig{
+	ClientConfig: solanarpc.ClientConfig{
+		Resources: []string{"https://...", "wss://..."},
+		RequestTimeout: 5 * time.Second,
+	},
+	RPCProxyEnabled:    true,
+	RPCInflightCache:   true,
+	RPCContextFactory:  func() context.Context { return context.Background() },
+	RPCPreprocessHook:  nil,
+	RPCPostProcessHook: nil,
+})
+```
+
+The platform config embeds the underlying RPC `ClientConfig`. Both EVM and
+Solana RPC packages expose the same core client fields:
 
 ```go
 rpc.NewRawClient(&rpc.ClientConfig{
