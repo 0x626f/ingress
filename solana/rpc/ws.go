@@ -171,6 +171,7 @@ func parseSubscriptionResultID(data []byte) (uint64, error) {
 }
 
 func (client *ThinClient) AccountSubscribe(ctx context.Context, query AccountSubscribeQuery) (*Subscription, error) {
+	query = normalizeAccountSubscribeQuery(query)
 	return client.RawSubscribe(ctx,
 		RPCMethodAccountSubscribe,
 		RPCMethodAccountUnsubscribe,
@@ -195,6 +196,7 @@ func (client *ThinClient) LogsSubscribe(ctx context.Context, query LogsSubscribe
 }
 
 func (client *ThinClient) ProgramSubscribe(ctx context.Context, query ProgramSubscribeQuery) (*Subscription, error) {
+	query = normalizeProgramSubscribeQuery(query)
 	return client.RawSubscribe(ctx,
 		RPCMethodProgramSubscribe,
 		RPCMethodProgramUnsubscribe,

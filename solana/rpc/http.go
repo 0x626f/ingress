@@ -38,6 +38,73 @@ func optionalCommitment(commitment model.Commitment) any {
 	return map[string]string{"commitment": commitment}
 }
 
+func defaultEncoding(encoding Encoding) Encoding {
+	if encoding == "" {
+		return EncodingBase64
+	}
+	return encoding
+}
+
+func normalizeProgramAccountFilters(query []ProgramAccountsFilter) []ProgramAccountsFilter {
+	if len(query) == 0 {
+		return query
+	}
+
+	filters := make([]ProgramAccountsFilter, len(query))
+	copy(filters, query)
+	for index := range filters {
+		if filters[index].Memcmp == nil || filters[index].Memcmp.Encoding != "" {
+			continue
+		}
+		memcmp := *filters[index].Memcmp
+		memcmp.Encoding = EncodingBase64
+		filters[index].Memcmp = &memcmp
+	}
+	return filters
+}
+
+func normalizeGetAccountInfoQuery(query GetAccountInfoQuery) GetAccountInfoQuery {
+	query.Encoding = defaultEncoding(query.Encoding)
+	return query
+}
+
+func normalizeGetProgramAccountsQuery(query GetProgramAccountsQuery) GetProgramAccountsQuery {
+	query.Encoding = defaultEncoding(query.Encoding)
+	query.Filters = normalizeProgramAccountFilters(query.Filters)
+	return query
+}
+
+func normalizeGetTokenAccountsByDelegateQuery(query GetTokenAccountsByDelegateQuery) GetTokenAccountsByDelegateQuery {
+	query.Encoding = defaultEncoding(query.Encoding)
+	return query
+}
+
+func normalizeGetTokenAccountsByOwnerQuery(query GetTokenAccountsByOwnerQuery) GetTokenAccountsByOwnerQuery {
+	query.Encoding = defaultEncoding(query.Encoding)
+	return query
+}
+
+func normalizeSendTransactionQuery(query SendTransactionQuery) SendTransactionQuery {
+	query.Encoding = defaultEncoding(query.Encoding)
+	return query
+}
+
+func normalizeSimulateTransactionQuery(query SimulateTransactionQuery) SimulateTransactionQuery {
+	query.Encoding = defaultEncoding(query.Encoding)
+	return query
+}
+
+func normalizeAccountSubscribeQuery(query AccountSubscribeQuery) AccountSubscribeQuery {
+	query.Encoding = defaultEncoding(query.Encoding)
+	return query
+}
+
+func normalizeProgramSubscribeQuery(query ProgramSubscribeQuery) ProgramSubscribeQuery {
+	query.Encoding = defaultEncoding(query.Encoding)
+	query.Filters = normalizeProgramAccountFilters(query.Filters)
+	return query
+}
+
 func methodCall(method string) func(*QueryParams) ([]byte, error) {
 	return func(params *QueryParams) ([]byte, error) {
 		return APISpec{}.BuildMethodCall(method, params)
@@ -57,6 +124,7 @@ func (client *ThinClient) RawCall(ctx context.Context, method string, params ...
 }
 
 func (client *ThinClient) GetAccountInfo(ctx context.Context, query GetAccountInfoQuery) (model.RawResult, error) {
+	query = normalizeGetAccountInfoQuery(query)
 	return client.rawMethod(ctx, RPCMethodGetAccountInfo, rawCallParams(query.Id, optionalParams([]any{query.Pubkey}, optionalQueryConfig(query))...))
 }
 
@@ -77,6 +145,7 @@ func (client *ThinClient) GetMultipleAccounts(ctx context.Context, query GetMult
 }
 
 func (client *ThinClient) GetProgramAccounts(ctx context.Context, query GetProgramAccountsQuery) (model.RawResult, error) {
+	query = normalizeGetProgramAccountsQuery(query)
 	return client.rawMethod(ctx, RPCMethodGetProgramAccounts, rawCallParams(query.Id, optionalParams([]any{query.ProgramID}, optionalQueryConfig(query))...))
 }
 
@@ -85,10 +154,12 @@ func (client *ThinClient) GetTokenAccountBalance(ctx context.Context, query GetT
 }
 
 func (client *ThinClient) GetTokenAccountsByDelegate(ctx context.Context, query GetTokenAccountsByDelegateQuery) (model.RawResult, error) {
+	query = normalizeGetTokenAccountsByDelegateQuery(query)
 	return client.rawMethod(ctx, RPCMethodGetTokenAccountsByDelegate, rawCallParams(query.Id, optionalParams([]any{query.Delegate, query.Filter}, optionalQueryConfig(query))...))
 }
 
 func (client *ThinClient) GetTokenAccountsByOwner(ctx context.Context, query GetTokenAccountsByOwnerQuery) (model.RawResult, error) {
+	query = normalizeGetTokenAccountsByOwnerQuery(query)
 	return client.rawMethod(ctx, RPCMethodGetTokenAccountsByOwner, rawCallParams(query.Id, optionalParams([]any{query.Owner, query.Filter}, optionalQueryConfig(query))...))
 }
 
@@ -153,6 +224,7 @@ func (client *ThinClient) SendTransaction(ctx context.Context, query SendTransac
 }
 
 func (client *ThinClient) SendEncodedTransaction(ctx context.Context, query SendTransactionQuery) (model.RawResult, error) {
+	query = normalizeSendTransactionQuery(query)
 	return client.rawMethod(ctx, RPCMethodSendTransaction, rawCallParams(query.Id, optionalParams([]any{query.Encoded}, optionalQueryConfig(query))...))
 }
 
@@ -161,13 +233,7 @@ func (client *ThinClient) SimulateTransaction(ctx context.Context, query Simulat
 	if encoded == "" {
 		encoded = base64.StdEncoding.EncodeToString(query.Serialized)
 	}
-	config := query
-	if query.Commitment != "" {
-		config.Commitment = query.Commitment
-	}
-	if config.Encoding == "" {
-		config.Encoding = EncodingBase64
-	}
+	config := normalizeSimulateTransactionQuery(query)
 
 	response, err := client.rawMethod(ctx, RPCMethodSimulateTransaction, rawCallParams(query.Id, optionalParams([]any{encoded}, optionalQueryConfig(config))...))
 	if err != nil {
@@ -189,6 +255,7 @@ func (client *ThinClient) SimulateTransaction(ctx context.Context, query Simulat
 }
 
 func (client *ThinClient) SimulateEncodedTransaction(ctx context.Context, query SimulateTransactionQuery) (model.RawResult, error) {
+	query = normalizeSimulateTransactionQuery(query)
 	return client.rawMethod(ctx, RPCMethodSimulateTransaction, rawCallParams(query.Id, optionalParams([]any{query.Encoded}, optionalQueryConfig(query))...))
 }
 

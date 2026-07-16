@@ -201,6 +201,155 @@ func requirePublicConfirmedSlotsCall(t *testing.T, name string, call func() (mod
 	return slots
 }
 
+func requestParams(t *testing.T, payload []byte) []json.RawMessage {
+	t.Helper()
+	var request struct {
+		Params []json.RawMessage `json:"params"`
+	}
+	if err := json.Unmarshal(payload, &request); err != nil {
+		t.Fatalf("unmarshal request: %v", err)
+	}
+	return request.Params
+}
+
+func TestSolanaRequestEncoding_DefaultsToBase64(t *testing.T) {
+	payload, err := APISpec{}.BuildMethodCall(
+		RPCMethodGetAccountInfo,
+		rawCallParams(1, optionalParams([]any{systemProgramID}, optionalQueryConfig(normalizeGetAccountInfoQuery(GetAccountInfoQuery{})))...),
+	)
+	if err != nil {
+		t.Fatalf("BuildMethodCall: %v", err)
+	}
+
+	params := requestParams(t, payload)
+	if len(params) != 2 {
+		t.Fatalf("expected two params, got %d: %s", len(params), payload)
+	}
+	var config struct {
+		Encoding Encoding `json:"encoding"`
+	}
+	if err := json.Unmarshal(params[1], &config); err != nil {
+		t.Fatalf("unmarshal config: %v", err)
+	}
+	if config.Encoding != EncodingBase64 {
+		t.Fatalf("expected default encoding %q, got %q", EncodingBase64, config.Encoding)
+	}
+}
+
+func TestSolanaRequestEncoding_PreservesExplicitEncoding(t *testing.T) {
+	payload, err := APISpec{}.BuildMethodCall(
+		RPCMethodGetAccountInfo,
+		rawCallParams(1, optionalParams([]any{systemProgramID}, optionalQueryConfig(normalizeGetAccountInfoQuery(GetAccountInfoQuery{Encoding: EncodingJSONParsed})))...),
+	)
+	if err != nil {
+		t.Fatalf("BuildMethodCall: %v", err)
+	}
+
+	params := requestParams(t, payload)
+	var config struct {
+		Encoding Encoding `json:"encoding"`
+	}
+	if err := json.Unmarshal(params[1], &config); err != nil {
+		t.Fatalf("unmarshal config: %v", err)
+	}
+	if config.Encoding != EncodingJSONParsed {
+		t.Fatalf("expected explicit encoding %q, got %q", EncodingJSONParsed, config.Encoding)
+	}
+}
+
+func TestSolanaRequestEncoding_DefaultsSendTransactionToBase64(t *testing.T) {
+	payload, err := APISpec{}.BuildMethodCall(
+		RPCMethodSendTransaction,
+		rawCallParams(1, optionalParams([]any{"encoded-transaction"}, optionalQueryConfig(normalizeSendTransactionQuery(SendTransactionQuery{})))...),
+	)
+	if err != nil {
+		t.Fatalf("BuildMethodCall: %v", err)
+	}
+
+	params := requestParams(t, payload)
+	if len(params) != 2 {
+		t.Fatalf("expected two params, got %d: %s", len(params), payload)
+	}
+	var config struct {
+		Encoding Encoding `json:"encoding"`
+	}
+	if err := json.Unmarshal(params[1], &config); err != nil {
+		t.Fatalf("unmarshal config: %v", err)
+	}
+	if config.Encoding != EncodingBase64 {
+		t.Fatalf("expected default encoding %q, got %q", EncodingBase64, config.Encoding)
+	}
+}
+
+func TestSolanaRequestEncoding_DefaultsProgramAccountsAndMemcmpToBase64(t *testing.T) {
+	memcmp := &MemcmpFilter{Offset: 0, Bytes: "base64-filter-bytes"}
+	query := GetProgramAccountsQuery{
+		Filters: []ProgramAccountsFilter{{Memcmp: memcmp}},
+	}
+	payload, err := APISpec{}.BuildMethodCall(
+		RPCMethodGetProgramAccounts,
+		rawCallParams(1, optionalParams([]any{systemProgramID}, optionalQueryConfig(normalizeGetProgramAccountsQuery(query)))...),
+	)
+	if err != nil {
+		t.Fatalf("BuildMethodCall: %v", err)
+	}
+
+	params := requestParams(t, payload)
+	if len(params) != 2 {
+		t.Fatalf("expected two params, got %d: %s", len(params), payload)
+	}
+	var config struct {
+		Encoding Encoding `json:"encoding"`
+		Filters  []struct {
+			Memcmp struct {
+				Encoding Encoding `json:"encoding"`
+			} `json:"memcmp"`
+		} `json:"filters"`
+	}
+	if err := json.Unmarshal(params[1], &config); err != nil {
+		t.Fatalf("unmarshal config: %v", err)
+	}
+	if config.Encoding != EncodingBase64 {
+		t.Fatalf("expected top-level encoding %q, got %q", EncodingBase64, config.Encoding)
+	}
+	if config.Filters[0].Memcmp.Encoding != EncodingBase64 {
+		t.Fatalf("expected memcmp encoding %q, got %q", EncodingBase64, config.Filters[0].Memcmp.Encoding)
+	}
+	if memcmp.Encoding != "" {
+		t.Fatalf("normalization mutated original memcmp encoding: %q", memcmp.Encoding)
+	}
+}
+
+func TestSolanaRequestEncoding_DoesNotDefaultGetTransactionEncoding(t *testing.T) {
+	payload, err := APISpec{}.BuildMethodCall(
+		RPCMethodGetTransaction,
+		rawCallParams(1, optionalParams([]any{"signature"}, optionalQueryConfig(GetTransactionQuery{}))...),
+	)
+	if err != nil {
+		t.Fatalf("BuildMethodCall: %v", err)
+	}
+
+	params := requestParams(t, payload)
+	if len(params) != 1 {
+		t.Fatalf("expected only required params, got %d: %s", len(params), payload)
+	}
+}
+
+func TestSolanaRequestEncoding_DoesNotAddConfigWithoutEncoding(t *testing.T) {
+	payload, err := APISpec{}.BuildMethodCall(
+		RPCMethodGetBalance,
+		rawCallParams(1, optionalParams([]any{systemProgramID}, optionalQueryConfig(GetBalanceQuery{}))...),
+	)
+	if err != nil {
+		t.Fatalf("BuildMethodCall: %v", err)
+	}
+
+	params := requestParams(t, payload)
+	if len(params) != 1 {
+		t.Fatalf("expected only required params, got %d: %s", len(params), payload)
+	}
+}
+
 func TestNewRawClient_PublicResources(t *testing.T) {
 	raw, err := NewRawClient(&ClientConfig{
 		Resources: []string{
