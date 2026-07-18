@@ -11,6 +11,11 @@ import (
 	"github.com/0x626f/ingress/transport"
 )
 
+const (
+	validAddress = "0x1111111111111111111111111111111111111111"
+	zeroAddress  = "0x0000000000000000000000000000000000000000"
+)
+
 // ============================================================================
 // Mock infrastructure
 // ============================================================================
@@ -311,12 +316,56 @@ func TestClient_GetCode_MethodAndParams(t *testing.T) {
 }
 
 // ============================================================================
+// GetStorageAt
+// ============================================================================
+
+func TestClient_GetStorageAt_PreservesExplicitHexZeroSlot(t *testing.T) {
+	conn := okHTTP()
+	query := GetStorageQuery{AddressedQuery: AddressedQuery{Address: validAddress}, Slot: "0x0"}
+	if _, err := withHTTP(conn).GetStorageAt(context.Background(), query); err != nil {
+		t.Fatal(err)
+	}
+
+	var params []string
+	if err := json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{validAddress, "0x0", BlockTagLatest}
+	if len(params) != len(want) {
+		t.Fatalf("expected %v, got %v", want, params)
+	}
+	for i := range want {
+		if params[i] != want[i] {
+			t.Fatalf("expected %v, got %v", want, params)
+		}
+	}
+}
+
+func TestClient_GetStorageAt_ConvertsDecimalZeroSlot(t *testing.T) {
+	conn := okHTTP()
+	query := GetStorageQuery{AddressedQuery: AddressedQuery{Address: validAddress}, Slot: "0"}
+	if _, err := withHTTP(conn).GetStorageAt(context.Background(), query); err != nil {
+		t.Fatal(err)
+	}
+
+	var params []string
+	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
+	if params[1] != "0x0" {
+		t.Fatalf("expected decimal zero slot to serialize as 0x0, got %q", params[1])
+	}
+}
+
+// ============================================================================
 // Call
 // ============================================================================
 
 func TestClient_Call_MethodAndParams(t *testing.T) {
 	conn := okHTTP()
-	withHTTP(conn).Call(context.Background(), CallQuery{To: "0xContract", Data: "0xdeadbeef"})
+	withHTTP(conn).Call(context.Background(), CallQuery{
+		OnBlockQuery: OnBlockQuery{BlockTag: BlockTagLatest},
+		To:           validAddress,
+		Data:         "0xdeadbeef",
+	})
 	req := parseReq(t, conn.lastPayload)
 	if req.Method != "eth_call" {
 		t.Errorf("expected eth_call, got %s", req.Method)
@@ -328,13 +377,82 @@ func TestClient_Call_MethodAndParams(t *testing.T) {
 	}
 	var callObj map[string]string
 	json.Unmarshal(params[0], &callObj)
-	if callObj["to"] != "0xContract" || callObj["data"] != "0xdeadbeef" {
+	if callObj["to"] != validAddress || callObj["data"] != "0xdeadbeef" {
 		t.Errorf("unexpected call object: %v", callObj)
 	}
 	var blockTag string
 	json.Unmarshal(params[1], &blockTag)
 	if blockTag != BlockTagLatest {
 		t.Errorf("expected block tag 'latest', got %q", blockTag)
+	}
+}
+
+func TestClient_Call_OmitsUnsetOptionalFields(t *testing.T) {
+	conn := okHTTP()
+	if _, err := withHTTP(conn).Call(context.Background(), CallQuery{}); err != nil {
+		t.Fatal(err)
+	}
+
+	var params []json.RawMessage
+	if err := json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params); err != nil {
+		t.Fatal(err)
+	}
+	if len(params) != 2 {
+		t.Fatalf("expected transaction object and compatible default block, got %d params", len(params))
+	}
+	var callObj map[string]json.RawMessage
+	if err := json.Unmarshal(params[0], &callObj); err != nil {
+		t.Fatal(err)
+	}
+	if len(callObj) != 0 {
+		t.Fatalf("expected unset optional call fields to be absent, got %s", params[0])
+	}
+	var block string
+	json.Unmarshal(params[1], &block)
+	if block != BlockTagLatest {
+		t.Fatalf("expected compatible latest block default, got %q", block)
+	}
+}
+
+func TestClient_Call_ContractCreationOmitsTo(t *testing.T) {
+	conn := okHTTP()
+	if _, err := withHTTP(conn).Call(context.Background(), CallQuery{Data: "0x60006000"}); err != nil {
+		t.Fatal(err)
+	}
+
+	var params []json.RawMessage
+	if err := json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params); err != nil {
+		t.Fatal(err)
+	}
+	if len(params) != 2 {
+		t.Fatalf("expected transaction object and block param, got %d params", len(params))
+	}
+	var callObj map[string]string
+	if err := json.Unmarshal(params[0], &callObj); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := callObj["to"]; ok {
+		t.Fatalf("contract creation must omit to: %v", callObj)
+	}
+	if callObj["data"] != "0x60006000" {
+		t.Fatalf("expected creation data to be preserved, got %v", callObj)
+	}
+}
+
+func TestClient_Call_PreservesZeroAddress(t *testing.T) {
+	conn := okHTTP()
+	if _, err := withHTTP(conn).Call(context.Background(), CallQuery{To: zeroAddress}); err != nil {
+		t.Fatal(err)
+	}
+
+	var params []json.RawMessage
+	if err := json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params); err != nil {
+		t.Fatal(err)
+	}
+	var callObj map[string]string
+	json.Unmarshal(params[0], &callObj)
+	if callObj["to"] != zeroAddress {
+		t.Fatalf("expected zero address to be preserved, got %q", callObj["to"])
 	}
 }
 
@@ -354,9 +472,9 @@ func TestClient_Call_CustomBlockTag(t *testing.T) {
 // EstimateGas
 // ============================================================================
 
-func TestClient_EstimateGas_RequiredFieldOnly(t *testing.T) {
+func TestClient_EstimateGas_NonEmptyToIsSerialized(t *testing.T) {
 	conn := okHTTP()
-	withHTTP(conn).EstimateGas(context.Background(), EstimateGasQuery{To: "0xRecipient"})
+	withHTTP(conn).EstimateGas(context.Background(), EstimateGasQuery{To: validAddress})
 	req := parseReq(t, conn.lastPayload)
 	if req.Method != "eth_estimateGas" {
 		t.Errorf("expected eth_estimateGas, got %s", req.Method)
@@ -365,13 +483,54 @@ func TestClient_EstimateGas_RequiredFieldOnly(t *testing.T) {
 	json.Unmarshal(req.Params, &params)
 	var callObj map[string]string
 	json.Unmarshal(params[0], &callObj)
-	if callObj["to"] != "0xRecipient" {
-		t.Errorf("expected to='0xRecipient', got %q", callObj["to"])
+	if callObj["to"] != validAddress {
+		t.Errorf("expected to=%q, got %q", validAddress, callObj["to"])
 	}
-	for _, optional := range []string{"from", "data", "gas", "gasPrice", "value", "nonce"} {
+	for _, optional := range []string{"from", "data", "gas", "gasPrice", "maxFeePerGas", "maxPriorityFeePerGas", "value", "nonce"} {
 		if _, ok := callObj[optional]; ok {
 			t.Errorf("expected %q to be absent when empty", optional)
 		}
+	}
+}
+
+func TestClient_EstimateGas_ContractCreationOmitsTo(t *testing.T) {
+	conn := okHTTP()
+	query := EstimateGasQuery{From: validAddress, Data: "0x60006000"}
+	if _, err := withHTTP(conn).EstimateGas(context.Background(), query); err != nil {
+		t.Fatal(err)
+	}
+
+	var params []json.RawMessage
+	if err := json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params); err != nil {
+		t.Fatal(err)
+	}
+	if len(params) != 2 {
+		t.Fatalf("expected transaction object and compatible default block, got %d params", len(params))
+	}
+	var callObj map[string]string
+	if err := json.Unmarshal(params[0], &callObj); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := callObj["to"]; ok {
+		t.Fatalf("contract creation must omit to: %s", params[0])
+	}
+	if len(callObj) != 2 || callObj["from"] != validAddress || callObj["data"] != "0x60006000" {
+		t.Fatalf("unexpected contract creation object: %s", params[0])
+	}
+}
+
+func TestClient_EstimateGas_OmitsEveryUnsetOptionalField(t *testing.T) {
+	conn := okHTTP()
+	if _, err := withHTTP(conn).EstimateGas(context.Background(), EstimateGasQuery{}); err != nil {
+		t.Fatal(err)
+	}
+
+	var params []json.RawMessage
+	if err := json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params); err != nil {
+		t.Fatal(err)
+	}
+	if len(params) != 2 || string(params[0]) != "{}" {
+		t.Fatalf("expected empty transaction object and compatible default block, got %s", parseReq(t, conn.lastPayload).Params)
 	}
 }
 
@@ -410,15 +569,75 @@ func TestClient_EstimateGas_AllFields_HexEncoded(t *testing.T) {
 	}
 }
 
-func TestClient_EstimateGas_DefaultBlockLatest(t *testing.T) {
+func TestClient_EstimateGas_PreservesExplicitHexZeroQuantities(t *testing.T) {
 	conn := okHTTP()
-	withHTTP(conn).EstimateGas(context.Background(), EstimateGasQuery{To: "0x0"})
+	query := EstimateGasQuery{
+		Gas:                  "0x0",
+		GasPrice:             "0x0",
+		MaxFeePerGas:         "0x0",
+		MaxPriorityFeePerGas: "0x0",
+		Value:                "0x0",
+		Nonce:                "0x0",
+	}
+	if _, err := withHTTP(conn).EstimateGas(context.Background(), query); err != nil {
+		t.Fatal(err)
+	}
+
 	var params []json.RawMessage
 	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
+	var callObj map[string]string
+	json.Unmarshal(params[0], &callObj)
+	for _, field := range []string{"gas", "gasPrice", "maxFeePerGas", "maxPriorityFeePerGas", "value", "nonce"} {
+		if callObj[field] != "0x0" {
+			t.Errorf("expected %s=0x0, got %q", field, callObj[field])
+		}
+	}
+}
+
+func TestClient_EstimateGas_PreservesZeroAddresses(t *testing.T) {
+	conn := okHTTP()
+	if _, err := withHTTP(conn).EstimateGas(context.Background(), EstimateGasQuery{To: zeroAddress, From: zeroAddress}); err != nil {
+		t.Fatal(err)
+	}
+
+	var params []json.RawMessage
+	if err := json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params); err != nil {
+		t.Fatal(err)
+	}
+	var callObj map[string]string
+	json.Unmarshal(params[0], &callObj)
+	if callObj["to"] != zeroAddress || callObj["from"] != zeroAddress {
+		t.Fatalf("expected zero addresses to be preserved, got %v", callObj)
+	}
+}
+
+func TestClient_EstimateGas_DefaultsUnsetBlockAndSerializesExplicitBlock(t *testing.T) {
+	conn := okHTTP()
+	client := withHTTP(conn)
+	if _, err := client.EstimateGas(context.Background(), EstimateGasQuery{}); err != nil {
+		t.Fatal(err)
+	}
+	var params []json.RawMessage
+	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
+	if len(params) != 2 {
+		t.Fatalf("expected compatible default block selector, got %s", parseReq(t, conn.lastPayload).Params)
+	}
 	var tag string
 	json.Unmarshal(params[1], &tag)
 	if tag != BlockTagLatest {
-		t.Errorf("expected 'latest', got %q", tag)
+		t.Fatalf("expected latest default block, got %q", tag)
+	}
+
+	if _, err := client.EstimateGas(context.Background(), EstimateGasQuery{OnBlockQuery: OnBlockQuery{BlockTag: BlockTagPending}}); err != nil {
+		t.Fatal(err)
+	}
+	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
+	if len(params) != 2 {
+		t.Fatalf("expected explicit block selector, got %s", parseReq(t, conn.lastPayload).Params)
+	}
+	json.Unmarshal(params[1], &tag)
+	if tag != BlockTagPending {
+		t.Fatalf("expected pending block, got %q", tag)
 	}
 }
 
@@ -526,6 +745,20 @@ func TestClient_GetBlockByNumber_NumberConvertedToHex(t *testing.T) {
 	}
 }
 
+func TestClient_GetBlockByNumber_PreservesExplicitHexZero(t *testing.T) {
+	conn := okHTTP()
+	if _, err := withHTTP(conn).GetBlockByNumber(context.Background(), BlockQuery{Number: "0x0"}); err != nil {
+		t.Fatal(err)
+	}
+	var params []json.RawMessage
+	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
+	var tag string
+	json.Unmarshal(params[0], &tag)
+	if tag != "0x0" {
+		t.Fatalf("expected explicit block number 0x0 to be preserved, got %q", tag)
+	}
+}
+
 func TestClient_GetBlockByNumber_NumberOverridesBlockTag(t *testing.T) {
 	conn := okHTTP()
 	withHTTP(conn).GetBlockByNumber(context.Background(), BlockQuery{
@@ -588,19 +821,26 @@ func TestClient_GetBlockByHash_UsesHash(t *testing.T) {
 	}
 }
 
-func TestClient_GetBlockByHash_FallsBackToBlockTag(t *testing.T) {
+func TestClient_GetBlockByHash_MissingHashReturnsLocalError(t *testing.T) {
 	conn := okHTTP()
-	withHTTP(conn).GetBlockByHash(context.Background(), BlockQuery{OnBlockQuery: OnBlockQuery{BlockTag: BlockTagSafe}})
-	req := parseReq(t, conn.lastPayload)
-	if req.Method != "eth_getBlockByHash" {
-		t.Errorf("expected eth_getBlockByHash, got %s", req.Method)
+	_, err := withHTTP(conn).GetBlockByHash(context.Background(), BlockQuery{OnBlockQuery: OnBlockQuery{BlockTag: BlockTagSafe}})
+	if err == nil || err.Error() != "eth_getBlockByHash: block hash is required" {
+		t.Fatalf("expected clear missing block hash error, got %v", err)
+	}
+	if conn.callCount != 0 {
+		t.Fatalf("invalid request must not reach the transport, got %d calls", conn.callCount)
+	}
+}
+
+func TestClient_GetBlockByHash_SerializesRequiredFalseBoolean(t *testing.T) {
+	conn := okHTTP()
+	if _, err := withHTTP(conn).GetBlockByHash(context.Background(), BlockQuery{Hash: "0xBlockHash"}); err != nil {
+		t.Fatal(err)
 	}
 	var params []json.RawMessage
-	json.Unmarshal(req.Params, &params)
-	var tag string
-	json.Unmarshal(params[0], &tag)
-	if tag != BlockTagSafe {
-		t.Errorf("expected 'safe', got %q", tag)
+	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
+	if len(params) != 2 || string(params[1]) != "false" {
+		t.Fatalf("required hydrated-transactions flag must remain present as false, got %s", parseReq(t, conn.lastPayload).Params)
 	}
 }
 
@@ -622,20 +862,36 @@ func TestClient_GetLogs_Method(t *testing.T) {
 	}
 }
 
-func TestClient_GetLogs_DefaultToBlockLatest(t *testing.T) {
+func TestClient_GetLogs_OmitsUnsetOptionalFields(t *testing.T) {
 	conn := okHTTP()
-	withHTTP(conn).GetLogs(context.Background(), LogsQuery{
-		AddressedQuery: AddressedQuery{Address: "0xContract"},
-		FromBlock:      "0x0",
-	})
+	withHTTP(conn).GetLogs(context.Background(), LogsQuery{})
 	var params []json.RawMessage
 	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
 	var filterObj map[string]json.RawMessage
 	json.Unmarshal(params[0], &filterObj)
-	var toBlock string
-	json.Unmarshal(filterObj["toBlock"], &toBlock)
-	if toBlock != BlockTagLatest {
-		t.Errorf("expected toBlock='latest', got %q", toBlock)
+	if len(filterObj) != 0 {
+		t.Fatalf("expected every unset optional filter field to be absent, got %s", params[0])
+	}
+}
+
+func TestClient_GetLogs_PreservesExplicitHexZeroBlocksAndZeroAddress(t *testing.T) {
+	conn := okHTTP()
+	query := LogsQuery{
+		AddressedQuery: AddressedQuery{Address: zeroAddress},
+		FromBlock:      "0x0",
+		ToBlock:        "0x0",
+	}
+	if _, err := withHTTP(conn).GetLogs(context.Background(), query); err != nil {
+		t.Fatal(err)
+	}
+	var params []json.RawMessage
+	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
+	var filterObj map[string]string
+	if err := json.Unmarshal(params[0], &filterObj); err != nil {
+		t.Fatal(err)
+	}
+	if filterObj["fromBlock"] != "0x0" || filterObj["toBlock"] != "0x0" || filterObj["address"] != zeroAddress {
+		t.Fatalf("expected explicit zero values to be preserved, got %v", filterObj)
 	}
 }
 
@@ -677,6 +933,127 @@ func TestClient_HTTP_UnSubscribe_ReturnsError(t *testing.T) {
 	if err == nil {
 		t.Error("expected error: HTTP rpc does not support UnSubscribe")
 	}
+}
+
+func TestClient_RequiredFieldsRejectEmptyValuesLocally(t *testing.T) {
+	tests := []struct {
+		name string
+		call func(*ThinClient) ([]byte, error)
+		want string
+	}{
+		{
+			name: "get balance address",
+			call: func(client *ThinClient) ([]byte, error) {
+				return client.GetBalance(context.Background(), BalanceQuery{})
+			},
+			want: "eth_getBalance: address is required",
+		},
+		{
+			name: "get code address",
+			call: func(client *ThinClient) ([]byte, error) {
+				return client.GetCode(context.Background(), CodeQuery{})
+			},
+			want: "eth_getCode: address is required",
+		},
+		{
+			name: "storage address",
+			call: func(client *ThinClient) ([]byte, error) {
+				return client.GetStorageAt(context.Background(), GetStorageQuery{Slot: "0x0"})
+			},
+			want: "eth_getStorageAt: address is required",
+		},
+		{
+			name: "storage slot",
+			call: func(client *ThinClient) ([]byte, error) {
+				return client.GetStorageAt(context.Background(), GetStorageQuery{AddressedQuery: AddressedQuery{Address: validAddress}})
+			},
+			want: "eth_getStorageAt: slot is required",
+		},
+		{
+			name: "signed transaction",
+			call: func(client *ThinClient) ([]byte, error) {
+				return client.SendRawTransaction(context.Background(), TransactionQuery{})
+			},
+			want: "eth_sendRawTransaction: signed transaction is required",
+		},
+		{
+			name: "transaction lookup hash",
+			call: func(client *ThinClient) ([]byte, error) {
+				return client.GetTransactionByHash(context.Background(), TransactionQuery{})
+			},
+			want: "eth_getTransactionByHash: transaction hash is required",
+		},
+		{
+			name: "receipt hash",
+			call: func(client *ThinClient) ([]byte, error) {
+				return client.GetTransactionReceipt(context.Background(), TransactionQuery{})
+			},
+			want: "eth_getTransactionReceipt: transaction hash is required",
+		},
+		{
+			name: "transaction count address",
+			call: func(client *ThinClient) ([]byte, error) {
+				return client.GetTransactionCount(context.Background(), AddressedQuery{})
+			},
+			want: "eth_getTransactionCount: address is required",
+		},
+		{
+			name: "block hash",
+			call: func(client *ThinClient) ([]byte, error) {
+				return client.GetBlockByHash(context.Background(), BlockQuery{})
+			},
+			want: "eth_getBlockByHash: block hash is required",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			conn := okHTTP()
+			_, err := test.call(withHTTP(conn))
+			if err == nil || err.Error() != test.want {
+				t.Fatalf("expected %q, got %v", test.want, err)
+			}
+			if conn.callCount != 0 {
+				t.Fatalf("invalid request must not reach the transport, got %d calls", conn.callCount)
+			}
+		})
+	}
+}
+
+func TestClient_InvalidQuantitiesReturnLocalErrorsInsteadOfEmptyFields(t *testing.T) {
+	t.Run("estimate gas", func(t *testing.T) {
+		conn := okHTTP()
+		_, err := withHTTP(conn).EstimateGas(context.Background(), EstimateGasQuery{Value: "invalid"})
+		if err == nil || err.Error() != "eth_estimateGas: value must be a decimal or 0x-prefixed quantity" {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if conn.callCount != 0 {
+			t.Fatal("invalid estimate gas quantity reached transport")
+		}
+	})
+
+	t.Run("storage slot", func(t *testing.T) {
+		conn := okHTTP()
+		query := GetStorageQuery{AddressedQuery: AddressedQuery{Address: validAddress}, Slot: "invalid"}
+		_, err := withHTTP(conn).GetStorageAt(context.Background(), query)
+		if err == nil || err.Error() != "eth_getStorageAt: slot must be a decimal or 0x-prefixed quantity" {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if conn.callCount != 0 {
+			t.Fatal("invalid storage slot reached transport")
+		}
+	})
+
+	t.Run("block number", func(t *testing.T) {
+		conn := okHTTP()
+		_, err := withHTTP(conn).GetBlockByNumber(context.Background(), BlockQuery{Number: "invalid"})
+		if err == nil || err.Error() != "eth_getBlockByNumber: block number must be a decimal or 0x-prefixed quantity" {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if conn.callCount != 0 {
+			t.Fatal("invalid block number reached transport")
+		}
+	})
 }
 
 func TestWSClient_Subscribe_NewHeads_SendsSingleParam(t *testing.T) {
@@ -724,6 +1101,40 @@ func TestWSClient_Subscribe_Logs_IncludesFilterParams(t *testing.T) {
 	}
 	if _, ok := filter["topics"]; !ok {
 		t.Error("expected 'topics' in filter object")
+	}
+}
+
+func TestWSClient_Subscribe_PreservesZeroAddressAndOmitsUnsetTopics(t *testing.T) {
+	conn := &mockWSConnection{kind: transport.WS, events: make(chan transport.Message, 8), result: "0xsub-zero"}
+	if _, _, err := withWS(conn).Subscribe(context.Background(), SubscribeQuery{On: SubscriptionLogs, Address: zeroAddress}); err != nil {
+		t.Fatal(err)
+	}
+
+	var params []json.RawMessage
+	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
+	var filter map[string]json.RawMessage
+	json.Unmarshal(params[1], &filter)
+	var address string
+	json.Unmarshal(filter["address"], &address)
+	if address != zeroAddress {
+		t.Fatalf("expected zero address to be preserved, got %q", address)
+	}
+	if _, ok := filter["topics"]; ok {
+		t.Fatalf("expected unset topics to be omitted, got %s", params[1])
+	}
+}
+
+func TestWSClient_SubscribeAndUnsubscribe_RejectMissingRequiredFields(t *testing.T) {
+	conn := okWS()
+	client := withWS(conn)
+	if _, _, err := client.Subscribe(context.Background(), SubscribeQuery{}); err == nil || err.Error() != "eth_subscribe: subscription type is required" {
+		t.Fatalf("unexpected subscribe error: %v", err)
+	}
+	if _, err := client.UnSubscribe(context.Background(), UnSubscribeQuery{}); err == nil || err.Error() != "eth_unsubscribe: subscription ID is required" {
+		t.Fatalf("unexpected unsubscribe error: %v", err)
+	}
+	if conn.callCount != 0 {
+		t.Fatalf("invalid subscription requests must not reach transport, got %d calls", conn.callCount)
 	}
 }
 
@@ -930,6 +1341,32 @@ func TestWSClient_GetBalance_CorrectParams(t *testing.T) {
 	json.Unmarshal(req.Params, &params)
 	if len(params) != 2 || params[0] != "0xABC" || params[1] != BlockTagLatest {
 		t.Errorf("expected [0xABC, latest], got %v", params)
+	}
+}
+
+func TestWSClient_EstimateGas_UsesSharedOptionalFieldSerialization(t *testing.T) {
+	conn := okWS()
+	query := EstimateGasQuery{From: validAddress, Data: "0x60006000", Value: "0x0"}
+	if _, err := withWS(conn).EstimateGas(context.Background(), query); err != nil {
+		t.Fatal(err)
+	}
+
+	var params []json.RawMessage
+	if err := json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params); err != nil {
+		t.Fatal(err)
+	}
+	if len(params) != 2 {
+		t.Fatalf("expected omitted to and compatible default block selector, got %s", parseReq(t, conn.lastPayload).Params)
+	}
+	var callObj map[string]string
+	if err := json.Unmarshal(params[0], &callObj); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := callObj["to"]; ok {
+		t.Fatalf("contract creation must omit to: %s", params[0])
+	}
+	if len(callObj) != 3 || callObj["from"] != validAddress || callObj["data"] != "0x60006000" || callObj["value"] != "0x0" {
+		t.Fatalf("unexpected estimate gas object: %s", params[0])
 	}
 }
 

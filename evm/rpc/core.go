@@ -78,9 +78,9 @@ type CodeQuery struct {
 // CallQuery is the input for eth_call.
 type CallQuery struct {
 	OnBlockQuery
-	// To is the contract address to call.
+	// To is the contract address to call. Leave it empty for contract creation.
 	To string
-	// Data is the ABI-encoded call data.
+	// Data is the optional ABI-encoded call data or contract creation bytecode.
 	Data string
 }
 
@@ -91,7 +91,8 @@ type GetStorageQuery struct {
 	Slot string
 }
 
-// EstimateGasQuery is the input for eth_estimateGas.
+// EstimateGasQuery is the input for eth_estimateGas. All transaction fields are
+// optional; in particular, To must be empty for contract creation.
 // All numeric fields (Gas, GasPrice, MaxFeePerGas, MaxPriorityFeePerGas, Value, Nonce)
 // may be supplied as decimal strings or 0x-prefixed hex strings.
 type EstimateGasQuery struct {
@@ -122,7 +123,8 @@ type BlockQuery struct {
 	OnBlockQuery
 	// Hash selects the block by hash (used by GetBlockByHash).
 	Hash string
-	// Number selects the block by number as a decimal string (used by GetBlockByNumber).
+	// Number selects the block by number as a decimal or 0x-prefixed string
+	// (used by GetBlockByNumber).
 	Number string
 	// FullTransactions controls whether full transaction objects or only hashes are returned.
 	FullTransactions bool
@@ -133,7 +135,7 @@ type LogsQuery struct {
 	AddressedQuery
 	// FromBlock is the start of the block range (block tag or hex number).
 	FromBlock string
-	// ToBlock is the end of the block range. Defaults to "latest" when empty.
+	// ToBlock is the optional end of the block range.
 	ToBlock string
 	// Topics is the ordered list of log topic filters.
 	Topics []string

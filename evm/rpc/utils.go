@@ -3,9 +3,10 @@ package rpc
 import (
 	"encoding/json"
 	"fmt"
-	"math/big"
 	"strconv"
 	"strings"
+
+	"github.com/holiman/uint256"
 )
 
 // RawNumber is any Go numeric type that can be decoded from a raw JSON number
@@ -40,12 +41,11 @@ func fromHex(s string) (uint64, error) {
 }
 
 func stringToHex(s string) string {
-	n := new(big.Int)
-	_, ok := n.SetString(s, 10)
-	if !ok {
+	var n uint256.Int
+	if err := n.SetFromDecimal(s); err != nil {
 		return ""
 	}
-	return "0x" + fmt.Sprintf("%x", n)
+	return n.Hex()
 }
 
 func stringToHexOrDefault(s string) string {
@@ -125,7 +125,8 @@ func ToHexQuantity(value uint64) string {
 }
 
 // DecimalStringToHexQuantity converts a decimal string to an EVM 0x-prefixed
-// hex quantity. It returns an empty string when the decimal input is invalid.
+// hex quantity. It returns an empty string when the decimal input is invalid
+// or exceeds the EVM uint256 range.
 func DecimalStringToHexQuantity(value string) string {
 	return stringToHex(value)
 }

@@ -613,14 +613,14 @@ func TestIntegration_GetLogs(t *testing.T) {
 	})
 }
 
-func TestIntegration_GetLogs_DefaultToBlock(t *testing.T) {
+func TestIntegration_GetLogs_OmittedToBlock(t *testing.T) {
 	forEachHTTPChain(t, func(t *testing.T, c *ThinClient, chain *chainConfig) {
 		fromBlock := hexBlockMinus(currentBlockHex(t, c), 5)
 		_, err := c.GetLogs(context.Background(), LogsQuery{
 			AddressedQuery: AddressedQuery{Address: chain.contract()},
 			FromBlock:      fromBlock,
 		})
-		requireRPC(t, "GetLogs(default toBlock)", err)
+		requireRPC(t, "GetLogs(omitted toBlock)", err)
 	})
 }
 

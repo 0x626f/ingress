@@ -267,6 +267,32 @@ func omitStream(result []byte, stream transport.RStream, err error) ([]byte, err
 	return result, err
 }
 
+func requireQueryField(method, field, value string) error {
+	if value == "" {
+		return fmt.Errorf("%s: %s is required", method, field)
+	}
+	return nil
+}
+
+func addOptionalString(fields map[string]string, field, value string) {
+	if value != "" {
+		fields[field] = value
+	}
+}
+
+func addOptionalQuantity(fields map[string]string, method, field, value string) error {
+	if value == "" {
+		return nil
+	}
+
+	quantity := stringToHexOrDefault(value)
+	if quantity == "" {
+		return fmt.Errorf("%s: %s must be a decimal or 0x-prefixed quantity", method, field)
+	}
+	fields[field] = quantity
+	return nil
+}
+
 // ChainId calls eth_chainId.
 func (client *ThinClient) ChainId(ctx context.Context) ([]byte, error) {
 	return omitStream(client.handle(ctx, APISpec{}.ChainId, DefaultQueryParams()))
@@ -279,6 +305,9 @@ func (client *ThinClient) BlockNumber(ctx context.Context) ([]byte, error) {
 
 // GetBalance calls eth_getBalance.
 func (client *ThinClient) GetBalance(ctx context.Context, query BalanceQuery) ([]byte, error) {
+	if err := requireQueryField(getBalance, "address", query.Address); err != nil {
+		return nil, err
+	}
 	return omitStream(client.handle(ctx,
 		APISpec{}.GetBalance,
 		QueryWithId(query.Id, query.Address, getOrDefault(BlockTagLatest, query.BlockTag)),
@@ -287,6 +316,9 @@ func (client *ThinClient) GetBalance(ctx context.Context, query BalanceQuery) ([
 
 // GetCode calls eth_getCode.
 func (client *ThinClient) GetCode(ctx context.Context, query CodeQuery) ([]byte, error) {
+	if err := requireQueryField(getCode, "address", query.Address); err != nil {
+		return nil, err
+	}
 	return omitStream(client.handle(ctx,
 		APISpec{}.GetCode,
 		QueryWithId(query.Id, query.Address, getOrDefault(BlockTagLatest, query.BlockTag)),
@@ -295,74 +327,70 @@ func (client *ThinClient) GetCode(ctx context.Context, query CodeQuery) ([]byte,
 
 // GetStorageAt calls eth_getStorageAt.
 func (client *ThinClient) GetStorageAt(ctx context.Context, query GetStorageQuery) ([]byte, error) {
+	if err := requireQueryField(getStorageAt, "address", query.Address); err != nil {
+		return nil, err
+	}
+	if err := requireQueryField(getStorageAt, "slot", query.Slot); err != nil {
+		return nil, err
+	}
+
+	slot := stringToHexOrDefault(query.Slot)
+	if slot == "" {
+		return nil, fmt.Errorf("%s: slot must be a decimal or 0x-prefixed quantity", getStorageAt)
+	}
 	return omitStream(client.handle(ctx,
 		APISpec{}.GetStorageAt,
-		QueryWithId(query.Id, query.Address, stringToHex(query.Slot), getOrDefault(BlockTagLatest, query.BlockTag)),
+		QueryWithId(query.Id, query.Address, slot, getOrDefault(BlockTagLatest, query.BlockTag)),
 	))
 }
 
 // Call calls eth_call.
 func (client *ThinClient) Call(ctx context.Context, query CallQuery) ([]byte, error) {
+	rpcCallData := make(map[string]string)
+	addOptionalString(rpcCallData, "to", query.To)
+	addOptionalString(rpcCallData, "data", query.Data)
+
 	return omitStream(client.handle(ctx,
 		APISpec{}.Call,
-		QueryWithId(
-			query.Id,
-			map[string]string{"to": query.To, "data": query.Data},
-			getOrDefault(BlockTagLatest, query.BlockTag),
-		),
+		QueryWithId(query.Id, rpcCallData, getOrDefault(BlockTagLatest, query.BlockTag)),
 	))
 }
 
 // EstimateGas calls eth_estimateGas.
 func (client *ThinClient) EstimateGas(ctx context.Context, query EstimateGasQuery) ([]byte, error) {
 	rpcCallData := make(map[string]string)
+	addOptionalString(rpcCallData, "to", query.To)
+	addOptionalString(rpcCallData, "from", query.From)
+	addOptionalString(rpcCallData, "data", query.Data)
 
-	rpcCallData["to"] = query.To
-
-	if query.From != "" {
-		rpcCallData["from"] = query.From
+	quantities := []struct {
+		field string
+		value string
+	}{
+		{field: "gas", value: query.Gas},
+		{field: "gasPrice", value: query.GasPrice},
+		{field: "maxFeePerGas", value: query.MaxFeePerGas},
+		{field: "maxPriorityFeePerGas", value: query.MaxPriorityFeePerGas},
+		{field: "value", value: query.Value},
+		{field: "nonce", value: query.Nonce},
 	}
-
-	if query.Data != "" {
-		rpcCallData["data"] = query.Data
-	}
-
-	if query.Gas != "" {
-		rpcCallData["gas"] = stringToHexOrDefault(query.Gas)
-	}
-
-	if query.GasPrice != "" {
-		rpcCallData["gasPrice"] = stringToHexOrDefault(query.GasPrice)
-	}
-
-	if query.MaxFeePerGas != "" {
-		rpcCallData["maxFeePerGas"] = stringToHexOrDefault(query.MaxFeePerGas)
-	}
-
-	if query.MaxPriorityFeePerGas != "" {
-		rpcCallData["maxPriorityFeePerGas"] = stringToHexOrDefault(query.MaxPriorityFeePerGas)
-	}
-
-	if query.Value != "" {
-		rpcCallData["value"] = stringToHexOrDefault(query.Value)
-	}
-
-	if query.Nonce != "" {
-		rpcCallData["nonce"] = stringToHexOrDefault(query.Nonce)
+	for _, quantity := range quantities {
+		if err := addOptionalQuantity(rpcCallData, estimateGas, quantity.field, quantity.value); err != nil {
+			return nil, err
+		}
 	}
 
 	return omitStream(client.handle(ctx,
 		APISpec{}.EstimateGas,
-		QueryWithId(
-			query.Id,
-			rpcCallData,
-			getOrDefault(BlockTagLatest, query.BlockTag),
-		),
+		QueryWithId(query.Id, rpcCallData, getOrDefault(BlockTagLatest, query.BlockTag)),
 	))
 }
 
 // SendRawTransaction calls eth_sendRawTransaction.
 func (client *ThinClient) SendRawTransaction(ctx context.Context, query TransactionQuery) ([]byte, error) {
+	if err := requireQueryField(sendRawTransaction, "signed transaction", query.Signed); err != nil {
+		return nil, err
+	}
 	return omitStream(client.handle(ctx,
 		APISpec{}.SendRawTransaction,
 		QueryWithId(
@@ -374,6 +402,9 @@ func (client *ThinClient) SendRawTransaction(ctx context.Context, query Transact
 
 // GetTransactionByHash calls eth_getTransactionByHash.
 func (client *ThinClient) GetTransactionByHash(ctx context.Context, query TransactionQuery) ([]byte, error) {
+	if err := requireQueryField(getTransactionByHash, "transaction hash", query.Hash); err != nil {
+		return nil, err
+	}
 	return omitStream(client.handle(ctx,
 		APISpec{}.GetTransactionByHash,
 		QueryWithId(
@@ -385,6 +416,9 @@ func (client *ThinClient) GetTransactionByHash(ctx context.Context, query Transa
 
 // GetTransactionReceipt calls eth_getTransactionReceipt.
 func (client *ThinClient) GetTransactionReceipt(ctx context.Context, query TransactionQuery) ([]byte, error) {
+	if err := requireQueryField(getTransactionReceipt, "transaction hash", query.Hash); err != nil {
+		return nil, err
+	}
 	return omitStream(client.handle(ctx,
 		APISpec{}.GetTransactionReceipt,
 		QueryWithId(
@@ -396,6 +430,9 @@ func (client *ThinClient) GetTransactionReceipt(ctx context.Context, query Trans
 
 // GetTransactionCount calls eth_getTransactionCount (nonce).
 func (client *ThinClient) GetTransactionCount(ctx context.Context, query AddressedQuery) ([]byte, error) {
+	if err := requireQueryField(getTransactionCount, "address", query.Address); err != nil {
+		return nil, err
+	}
 	return omitStream(client.handle(ctx,
 		APISpec{}.GetTransactionCount,
 		QueryWithId(
@@ -411,7 +448,10 @@ func (client *ThinClient) GetBlockByNumber(ctx context.Context, query BlockQuery
 	tag := getOrDefault(BlockTagLatest, query.BlockTag)
 
 	if query.Number != "" {
-		tag = stringToHex(query.Number)
+		tag = stringToHexOrDefault(query.Number)
+		if tag == "" {
+			return nil, fmt.Errorf("%s: block number must be a decimal or 0x-prefixed quantity", getBlockByNumber)
+		}
 	}
 
 	return omitStream(client.handle(ctx,
@@ -422,15 +462,13 @@ func (client *ThinClient) GetBlockByNumber(ctx context.Context, query BlockQuery
 
 // GetBlockByHash calls eth_getBlockByHash.
 func (client *ThinClient) GetBlockByHash(ctx context.Context, query BlockQuery) ([]byte, error) {
-	tag := getOrDefault(BlockTagLatest, query.BlockTag)
-
-	if query.Hash != "" {
-		tag = query.Hash
+	if err := requireQueryField(getBlockByHash, "block hash", query.Hash); err != nil {
+		return nil, err
 	}
 
 	return omitStream(client.handle(ctx,
 		APISpec{}.GetBlockByHash,
-		QueryWithId(query.Id, tag, query.FullTransactions),
+		QueryWithId(query.Id, query.Hash, query.FullTransactions),
 	))
 }
 
@@ -442,7 +480,9 @@ func (client *ThinClient) GetLogs(ctx context.Context, query LogsQuery) ([]byte,
 		rpcCallData["fromBlock"] = query.FromBlock
 	}
 
-	rpcCallData["toBlock"] = getOrDefault(BlockTagLatest, query.ToBlock)
+	if query.ToBlock != "" {
+		rpcCallData["toBlock"] = query.ToBlock
+	}
 
 	if query.Address != "" {
 		rpcCallData["address"] = query.Address
@@ -464,6 +504,9 @@ func (client *ThinClient) GetLogs(ctx context.Context, query LogsQuery) ([]byte,
 func (client *ThinClient) Subscribe(ctx context.Context, query SubscribeQuery) (transport.Subscription, transport.RStream, error) {
 	if client.kind != transport.WS {
 		return "", nil, fmt.Errorf("%s rpc doesn't support subscribe method", client.kind)
+	}
+	if err := requireQueryField(subscribe, "subscription type", query.On); err != nil {
+		return "", nil, err
 	}
 
 	var meta map[string]any
@@ -523,6 +566,9 @@ func (client *ThinClient) Subscribe(ctx context.Context, query SubscribeQuery) (
 func (client *ThinClient) UnSubscribe(ctx context.Context, query UnSubscribeQuery) ([]byte, error) {
 	if client.kind != transport.WS {
 		return nil, fmt.Errorf("%s rpc doesn't support subscribe method", client.kind)
+	}
+	if err := requireQueryField(unsubscribe, "subscription ID", query.Subscription); err != nil {
+		return nil, err
 	}
 
 	result, err := omitStream(client.handle(ctx,

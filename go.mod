@@ -5,6 +5,7 @@ go 1.24.2
 require (
 	github.com/bytedance/sonic v1.15.1
 	github.com/gobwas/ws v1.4.0
+	github.com/holiman/uint256 v1.3.2
 	github.com/mr-tron/base58 v1.3.0
 	golang.org/x/sync v0.19.0
 )

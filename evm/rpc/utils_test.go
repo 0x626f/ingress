@@ -118,3 +118,33 @@ func TestHexQuantityHelpers(t *testing.T) {
 		t.Fatalf("DecimalStringToHexQuantityOrDefault decimal: %s", got)
 	}
 }
+
+func TestDecimalStringToHexQuantity_Uint256Boundaries(t *testing.T) {
+	const (
+		maxDecimal      = "115792089237316195423570985008687907853269984665640564039457584007913129639935"
+		overflowDecimal = "115792089237316195423570985008687907853269984665640564039457584007913129639936"
+		maxHex          = "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+	)
+
+	tests := []struct {
+		name  string
+		value string
+		want  string
+	}{
+		{name: "zero", value: "0", want: "0x0"},
+		{name: "leading zeros", value: "000255", want: "0xff"},
+		{name: "maximum", value: maxDecimal, want: maxHex},
+		{name: "overflow", value: overflowDecimal, want: ""},
+		{name: "negative", value: "-1", want: ""},
+		{name: "empty", value: "", want: ""},
+		{name: "malformed", value: "12x", want: ""},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := DecimalStringToHexQuantity(test.value); got != test.want {
+				t.Fatalf("DecimalStringToHexQuantity(%q): want %q, got %q", test.value, test.want, got)
+			}
+		})
+	}
+}
