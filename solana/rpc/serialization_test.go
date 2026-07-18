@@ -2,10 +2,10 @@ package rpc
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"testing"
 
+	"github.com/0x626f/ingress/jsonrpc"
 	"github.com/0x626f/ingress/solana/model"
 )
 
@@ -126,12 +126,12 @@ func TestOptionalNumericFields_PreserveExplicitZero(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			data, err := json.Marshal(test.config)
+			data, err := jsonrpc.Marshal(test.config)
 			if err != nil {
 				t.Fatalf("Marshal: %v", err)
 			}
-			var config map[string]json.RawMessage
-			if err := json.Unmarshal(data, &config); err != nil {
+			var config map[string]jsonrpc.RawMessage
+			if err := jsonrpc.Unmarshal(data, &config); err != nil {
 				t.Fatalf("Unmarshal: %v", err)
 			}
 			value, ok := config[test.field]
@@ -193,8 +193,8 @@ func TestMinContextSlot_SerializesForSupportedMethods(t *testing.T) {
 		t.Run(test.method, func(t *testing.T) {
 			payload := []byte(mustBuildMethodCall(t, test.method, rawCallParams(1, test.params...)))
 			params := requestParams(t, payload)
-			var config map[string]json.RawMessage
-			if err := json.Unmarshal(params[len(params)-1], &config); err != nil {
+			var config map[string]jsonrpc.RawMessage
+			if err := jsonrpc.Unmarshal(params[len(params)-1], &config); err != nil {
 				t.Fatalf("unmarshal config: %v", err)
 			}
 			if string(config["minContextSlot"]) != "11" {

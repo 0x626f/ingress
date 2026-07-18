@@ -1,11 +1,11 @@
 package rpc
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
 
+	"github.com/0x626f/ingress/jsonrpc"
 	"github.com/0x626f/ingress/solana/model"
 	"github.com/mr-tron/base58"
 )
@@ -29,7 +29,7 @@ type RawNumber interface {
 func ParseRawResultToArray[T any](data model.RawResult) ([]*T, error) {
 	var result []*T
 
-	err := json.Unmarshal(data, &result)
+	err := jsonrpc.Unmarshal(data, &result)
 
 	return result, err
 }
@@ -44,7 +44,7 @@ func ParseRawResultToArray[T any](data model.RawResult) ([]*T, error) {
 func ParseRawResult[T any](data model.RawResult) (*T, error) {
 	var result *T
 
-	err := json.Unmarshal(data, &result)
+	err := jsonrpc.Unmarshal(data, &result)
 
 	return result, err
 }
@@ -53,7 +53,7 @@ func ParseRawResult[T any](data model.RawResult) (*T, error) {
 // objects, arrays, strings, booleans, and JSON numbers.
 func ParseRawValue[T any](data model.RawResult) (T, error) {
 	var result T
-	err := json.Unmarshal(data, &result)
+	err := jsonrpc.Unmarshal(data, &result)
 	return result, err
 }
 

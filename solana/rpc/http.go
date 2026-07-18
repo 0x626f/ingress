@@ -3,10 +3,10 @@ package rpc
 import (
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"strconv"
 
+	"github.com/0x626f/ingress/jsonrpc"
 	"github.com/0x626f/ingress/solana/model"
 )
 
@@ -24,7 +24,7 @@ func optionalQueryConfig(config any) any {
 	if config == nil {
 		return nil
 	}
-	data, err := json.Marshal(config)
+	data, err := jsonrpc.Marshal(config)
 	if err == nil && string(data) == "{}" {
 		return nil
 	}
@@ -329,7 +329,7 @@ func (client *ThinClient) SimulateTransaction(ctx context.Context, query Simulat
 			Err *string `json:"err,omitempty"`
 		} `json:"value"`
 	}{}
-	if err := json.Unmarshal(response, result); err != nil {
+	if err := jsonrpc.Unmarshal(response, result); err != nil {
 		return err
 	}
 	if result.Value != nil && result.Value.Err != nil {
@@ -393,7 +393,7 @@ func (client *ThinClient) GetConfirmedSlots(ctx context.Context, query GetConfir
 		return nil, err
 	}
 	var slots model.ConfirmedSlots
-	if err := json.Unmarshal(response, &slots); err != nil {
+	if err := jsonrpc.Unmarshal(response, &slots); err != nil {
 		return nil, err
 	}
 	return slots, nil
@@ -471,7 +471,7 @@ func (client *ThinClient) GetSlotLeaders(ctx context.Context, query GetSlotLeade
 		return nil, err
 	}
 	var leaders []string
-	if err := json.Unmarshal(response, &leaders); err != nil {
+	if err := jsonrpc.Unmarshal(response, &leaders); err != nil {
 		return nil, err
 	}
 	return leaders, nil

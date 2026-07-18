@@ -2,13 +2,13 @@ package rpc
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"strings"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/0x626f/ingress/jsonrpc"
 	"github.com/0x626f/ingress/solana/model"
 	"github.com/0x626f/ingress/transport"
 )
@@ -201,12 +201,12 @@ func requirePublicConfirmedSlotsCall(t *testing.T, name string, call func() (mod
 	return slots
 }
 
-func requestParams(t *testing.T, payload []byte) []json.RawMessage {
+func requestParams(t *testing.T, payload []byte) []jsonrpc.RawMessage {
 	t.Helper()
 	var request struct {
-		Params []json.RawMessage `json:"params"`
+		Params []jsonrpc.RawMessage `json:"params"`
 	}
-	if err := json.Unmarshal(payload, &request); err != nil {
+	if err := jsonrpc.Unmarshal(payload, &request); err != nil {
 		t.Fatalf("unmarshal request: %v", err)
 	}
 	return request.Params
@@ -228,7 +228,7 @@ func TestSolanaRequestEncoding_DefaultsToBase64(t *testing.T) {
 	var config struct {
 		Encoding Encoding `json:"encoding"`
 	}
-	if err := json.Unmarshal(params[1], &config); err != nil {
+	if err := jsonrpc.Unmarshal(params[1], &config); err != nil {
 		t.Fatalf("unmarshal config: %v", err)
 	}
 	if config.Encoding != EncodingBase64 {
@@ -249,7 +249,7 @@ func TestSolanaRequestEncoding_PreservesExplicitEncoding(t *testing.T) {
 	var config struct {
 		Encoding Encoding `json:"encoding"`
 	}
-	if err := json.Unmarshal(params[1], &config); err != nil {
+	if err := jsonrpc.Unmarshal(params[1], &config); err != nil {
 		t.Fatalf("unmarshal config: %v", err)
 	}
 	if config.Encoding != EncodingJSONParsed {
@@ -273,7 +273,7 @@ func TestSolanaRequestEncoding_DefaultsSendTransactionToBase64(t *testing.T) {
 	var config struct {
 		Encoding Encoding `json:"encoding"`
 	}
-	if err := json.Unmarshal(params[1], &config); err != nil {
+	if err := jsonrpc.Unmarshal(params[1], &config); err != nil {
 		t.Fatalf("unmarshal config: %v", err)
 	}
 	if config.Encoding != EncodingBase64 {
@@ -306,7 +306,7 @@ func TestSolanaRequestEncoding_DefaultsProgramAccountsAndMemcmpToBase64(t *testi
 			} `json:"memcmp"`
 		} `json:"filters"`
 	}
-	if err := json.Unmarshal(params[1], &config); err != nil {
+	if err := jsonrpc.Unmarshal(params[1], &config); err != nil {
 		t.Fatalf("unmarshal config: %v", err)
 	}
 	if config.Encoding != EncodingBase64 {
@@ -435,7 +435,7 @@ func TestPublicRPC_HealthAndVersion(t *testing.T) {
 
 	versionRaw := requireRawCall(t, "GetVersion", func() (model.RawResult, error) { return client.GetVersion(context.Background()) })
 	var version model.Version
-	if err := json.Unmarshal(versionRaw, &version); err != nil {
+	if err := jsonrpc.Unmarshal(versionRaw, &version); err != nil {
 		t.Fatalf("unmarshal version: %v", err)
 	}
 	if version.SolanaCore == "" {
@@ -444,7 +444,7 @@ func TestPublicRPC_HealthAndVersion(t *testing.T) {
 
 	identityRaw := requireRawCall(t, "GetIdentity", func() (model.RawResult, error) { return client.GetIdentity(context.Background()) })
 	var identity model.Identity
-	if err := json.Unmarshal(identityRaw, &identity); err != nil {
+	if err := jsonrpc.Unmarshal(identityRaw, &identity); err != nil {
 		t.Fatalf("unmarshal identity: %v", err)
 	}
 	if identity.Identity == "" {
@@ -463,7 +463,7 @@ func TestPublicRPC_SlotAndEpochMethods(t *testing.T) {
 		return client.GetBlockHeight(context.Background(), GetBlockHeightQuery{Commitment: model.ConfirmedCommitment})
 	})
 	var height uint64
-	if err := json.Unmarshal(blockHeight, &height); err != nil {
+	if err := jsonrpc.Unmarshal(blockHeight, &height); err != nil {
 		t.Fatalf("unmarshal block height: %v", err)
 	}
 	if height == 0 {
@@ -474,7 +474,7 @@ func TestPublicRPC_SlotAndEpochMethods(t *testing.T) {
 		return client.GetEpochInfo(context.Background(), GetEpochInfoQuery{Commitment: model.ConfirmedCommitment})
 	})
 	var epoch model.EpochInfo
-	if err := json.Unmarshal(epochRaw, &epoch); err != nil {
+	if err := jsonrpc.Unmarshal(epochRaw, &epoch); err != nil {
 		t.Fatalf("unmarshal epoch info: %v", err)
 	}
 	if epoch.SlotsInEpoch == 0 {
@@ -516,7 +516,7 @@ func TestPublicRPC_BlockAndLedgerMethods(t *testing.T) {
 		return client.GetBlocksWithLimit(context.Background(), GetBlocksWithLimitQuery{StartSlot: slot - 10, Limit: 2, Commitment: model.ConfirmedCommitment})
 	})
 	var blocks []model.Slot
-	if err := json.Unmarshal(blocksRaw, &blocks); err != nil {
+	if err := jsonrpc.Unmarshal(blocksRaw, &blocks); err != nil {
 		t.Fatalf("unmarshal blocks: %v", err)
 	}
 	if len(blocks) == 0 {
@@ -542,7 +542,7 @@ func TestPublicRPC_AccountMethods(t *testing.T) {
 		return client.GetBalance(context.Background(), GetBalanceQuery{Pubkey: systemProgramID, Commitment: model.ConfirmedCommitment})
 	})
 	var balance model.Balance
-	if err := json.Unmarshal(balanceRaw, &balance); err != nil {
+	if err := jsonrpc.Unmarshal(balanceRaw, &balance); err != nil {
 		t.Fatalf("unmarshal balance: %v", err)
 	}
 
@@ -550,7 +550,7 @@ func TestPublicRPC_AccountMethods(t *testing.T) {
 		return client.GetAccountInfo(context.Background(), GetAccountInfoQuery{Pubkey: systemProgramID, Encoding: EncodingBase64, Commitment: model.ConfirmedCommitment})
 	})
 	var account model.AccountInfo
-	if err := json.Unmarshal(accountRaw, &account); err != nil {
+	if err := jsonrpc.Unmarshal(accountRaw, &account); err != nil {
 		t.Fatalf("unmarshal account info: %v", err)
 	}
 	if account.Value == nil {
@@ -561,7 +561,7 @@ func TestPublicRPC_AccountMethods(t *testing.T) {
 		return client.GetMultipleAccounts(context.Background(), GetMultipleAccountsQuery{Pubkeys: []string{systemProgramID}, Encoding: EncodingBase64, Commitment: model.ConfirmedCommitment})
 	})
 	var multiple model.MultipleAccounts
-	if err := json.Unmarshal(multipleRaw, &multiple); err != nil {
+	if err := jsonrpc.Unmarshal(multipleRaw, &multiple); err != nil {
 		t.Fatalf("unmarshal multiple accounts: %v", err)
 	}
 	if len(multiple.Value) != 1 || multiple.Value[0] == nil {
@@ -586,7 +586,7 @@ func TestPublicRPC_TokenAndSupplyMethods(t *testing.T) {
 		})
 	})
 	var supply model.Supply
-	if err := json.Unmarshal(supplyRaw, &supply); err != nil {
+	if err := jsonrpc.Unmarshal(supplyRaw, &supply); err != nil {
 		t.Fatalf("unmarshal supply: %v", err)
 	}
 	if supply.Value.Total == 0 {
@@ -597,7 +597,7 @@ func TestPublicRPC_TokenAndSupplyMethods(t *testing.T) {
 		return client.GetTokenSupply(context.Background(), GetTokenSupplyQuery{Mint: wrappedSOLMint, Commitment: model.ConfirmedCommitment})
 	})
 	var tokenSupply model.TokenSupply
-	if err := json.Unmarshal(tokenSupplyRaw, &tokenSupply); err != nil {
+	if err := jsonrpc.Unmarshal(tokenSupplyRaw, &tokenSupply); err != nil {
 		t.Fatalf("unmarshal token supply: %v", err)
 	}
 	if tokenSupply.Value.Amount == "" {
@@ -619,7 +619,7 @@ func TestPublicRPC_BlockhashAndTransactionLookupMethods(t *testing.T) {
 		return client.GetLatestBlockhash(context.Background(), GetLatestBlockhashQuery{Commitment: model.ConfirmedCommitment})
 	})
 	var blockhash model.LatestBlockhash
-	if err := json.Unmarshal(blockhashRaw, &blockhash); err != nil {
+	if err := jsonrpc.Unmarshal(blockhashRaw, &blockhash); err != nil {
 		t.Fatalf("unmarshal latest blockhash: %v", err)
 	}
 	if blockhash.Value.Blockhash == "" {
@@ -630,7 +630,7 @@ func TestPublicRPC_BlockhashAndTransactionLookupMethods(t *testing.T) {
 		return client.IsBlockhashValid(context.Background(), IsBlockhashValidQuery{Blockhash: blockhash.Value.Blockhash, Commitment: model.ConfirmedCommitment})
 	})
 	var valid model.BlockhashValid
-	if err := json.Unmarshal(validRaw, &valid); err != nil {
+	if err := jsonrpc.Unmarshal(validRaw, &valid); err != nil {
 		t.Fatalf("unmarshal blockhash validity: %v", err)
 	}
 	if !valid.Value {
@@ -653,7 +653,7 @@ func TestPublicRPC_ClusterAndValidatorMethods(t *testing.T) {
 
 	nodesRaw := requireRawCall(t, "GetClusterNodes", func() (model.RawResult, error) { return client.GetClusterNodes(context.Background()) })
 	var nodes model.ClusterNodes
-	if err := json.Unmarshal(nodesRaw, &nodes); err != nil {
+	if err := jsonrpc.Unmarshal(nodesRaw, &nodes); err != nil {
 		t.Fatalf("unmarshal cluster nodes: %v", err)
 	}
 	if len(nodes) == 0 {
@@ -662,7 +662,7 @@ func TestPublicRPC_ClusterAndValidatorMethods(t *testing.T) {
 
 	voteRaw := requireRawCall(t, "GetVoteAccounts", func() (model.RawResult, error) { return client.GetVoteAccounts(context.Background()) })
 	var voteAccounts model.VoteAccounts
-	if err := json.Unmarshal(voteRaw, &voteAccounts); err != nil {
+	if err := jsonrpc.Unmarshal(voteRaw, &voteAccounts); err != nil {
 		t.Fatalf("unmarshal vote accounts: %v", err)
 	}
 	if len(voteAccounts.Current) == 0 {
@@ -699,7 +699,7 @@ func TestPublicWS_SlotSubscribe(t *testing.T) {
 			t.Fatalf("slot event error: %v", event.Error)
 		}
 		var slot model.SlotUpdate
-		if err := json.Unmarshal(event.Data, &slot); err != nil {
+		if err := jsonrpc.Unmarshal(event.Data, &slot); err != nil {
 			t.Fatalf("unmarshal slot event: %v; raw=%s", err, event.Data)
 		}
 		if slot.Slot == 0 {

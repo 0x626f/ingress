@@ -1,7 +1,6 @@
 package rpc
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/0x626f/ingress/jsonrpc"
@@ -102,11 +101,11 @@ func (spec APISpec) ParseMessageId(response []byte) (MessageId, error) {
 	var summary struct {
 		ID     uint `json:"id,omitempty"`
 		Params struct {
-			Subscription json.RawMessage `json:"subscription,omitempty"`
+			Subscription jsonrpc.RawMessage `json:"subscription,omitempty"`
 		} `json:"params,omitempty"`
 	}
 
-	if err := json.Unmarshal(response, &summary); err != nil {
+	if err := jsonrpc.Unmarshal(response, &summary); err != nil {
 		return MessageId{}, err
 	}
 
@@ -115,12 +114,12 @@ func (spec APISpec) ParseMessageId(response []byte) (MessageId, error) {
 	}
 
 	var number uint64
-	if err := json.Unmarshal(summary.Params.Subscription, &number); err == nil {
+	if err := jsonrpc.Unmarshal(summary.Params.Subscription, &number); err == nil {
 		return MessageId{ID: summary.ID, Subscription: fmt.Sprint(number)}, nil
 	}
 
 	var text string
-	if err := json.Unmarshal(summary.Params.Subscription, &text); err == nil {
+	if err := jsonrpc.Unmarshal(summary.Params.Subscription, &text); err == nil {
 		return MessageId{ID: summary.ID, Subscription: text}, nil
 	}
 

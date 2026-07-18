@@ -5,7 +5,9 @@
 // arrays as valid JSON, so structured Decode functions can unmarshal directly.
 package model
 
-import "encoding/json"
+import (
+	"github.com/0x626f/ingress/jsonrpc"
+)
 
 // ─── Scalar helpers ──────────────────────────────────────────────────────────
 
@@ -213,7 +215,7 @@ type Block struct {
 	// Transactions is either a JSON array of transaction hashes (strings) or
 	// full transaction objects depending on the FullTransactions query flag.
 	// Use TxHashes or TxObjects to decode.
-	Transactions json.RawMessage `json:"transactions"`
+	Transactions jsonrpc.RawMessage `json:"transactions"`
 	// Uncles is the list of uncle block hashes.
 	Uncles []string `json:"uncles"`
 	// BaseFeePerGas is the EIP-1559 base fee per gas. Omitted for pre-London blocks.
@@ -226,7 +228,7 @@ type Block struct {
 // Use this when the block was fetched with FullTransactions = false.
 func (b *Block) TxHashes() ([]string, error) {
 	var hashes []string
-	if err := json.Unmarshal(b.Transactions, &hashes); err != nil {
+	if err := jsonrpc.Unmarshal(b.Transactions, &hashes); err != nil {
 		return nil, err
 	}
 	return hashes, nil
@@ -236,7 +238,7 @@ func (b *Block) TxHashes() ([]string, error) {
 // Use this when the block was fetched with FullTransactions = true.
 func (b *Block) TxObjects() ([]Transaction, error) {
 	var txs []Transaction
-	if err := json.Unmarshal(b.Transactions, &txs); err != nil {
+	if err := jsonrpc.Unmarshal(b.Transactions, &txs); err != nil {
 		return nil, err
 	}
 	return txs, nil
@@ -255,5 +257,5 @@ func DecodeBlock(data []byte) (*Block, error) {
 
 // decodeObject unmarshals the result into v.
 func decodeObject(data []byte, v any) error {
-	return json.Unmarshal(data, v)
+	return jsonrpc.Unmarshal(data, v)
 }

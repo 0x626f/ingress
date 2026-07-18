@@ -2,7 +2,6 @@ package rpc
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"sync"
@@ -133,10 +132,10 @@ func (client *ThinClient) subscriptionBufferSize() int {
 
 func parseSubscriptionID(data []byte) (uint64, error) {
 	var response struct {
-		Result json.RawMessage `json:"result"`
-		Error  *jsonrpc.Error  `json:"error"`
+		Result jsonrpc.RawMessage `json:"result"`
+		Error  *jsonrpc.Error     `json:"error"`
 	}
-	if err := json.Unmarshal(data, &response); err != nil {
+	if err := jsonrpc.Unmarshal(data, &response); err != nil {
 		return 0, err
 	}
 	if response.Error != nil {
@@ -144,12 +143,12 @@ func parseSubscriptionID(data []byte) (uint64, error) {
 	}
 
 	var number uint64
-	if err := json.Unmarshal(response.Result, &number); err == nil {
+	if err := jsonrpc.Unmarshal(response.Result, &number); err == nil {
 		return number, nil
 	}
 
 	var text string
-	if err := json.Unmarshal(response.Result, &text); err == nil {
+	if err := jsonrpc.Unmarshal(response.Result, &text); err == nil {
 		return 0, fmt.Errorf("unexpected string subscription id %q", text)
 	}
 
@@ -158,12 +157,12 @@ func parseSubscriptionID(data []byte) (uint64, error) {
 
 func parseSubscriptionResultID(data []byte) (uint64, error) {
 	var number uint64
-	if err := json.Unmarshal(data, &number); err == nil {
+	if err := jsonrpc.Unmarshal(data, &number); err == nil {
 		return number, nil
 	}
 
 	var text string
-	if err := json.Unmarshal(data, &text); err == nil {
+	if err := jsonrpc.Unmarshal(data, &text); err == nil {
 		return 0, fmt.Errorf("unexpected string subscription id %q", text)
 	}
 
@@ -264,7 +263,7 @@ func (client *ThinClient) SubscribeSlot(ctx context.Context) (chan *Event[model.
 			var update struct {
 				Slot model.Slot `json:"slot"`
 			}
-			if err := json.Unmarshal(event.Data, &update); err != nil {
+			if err := jsonrpc.Unmarshal(event.Data, &update); err != nil {
 				channel <- &Event[model.Slot]{Error: err}
 				continue
 			}

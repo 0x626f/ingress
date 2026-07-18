@@ -2,9 +2,9 @@ package rpc
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
+	"github.com/0x626f/ingress/jsonrpc"
 	"github.com/0x626f/ingress/solana/model"
 )
 
@@ -194,11 +194,11 @@ func (filter ProgramAccountsFilter) MarshalJSON() ([]byte, error) {
 		return nil, fmt.Errorf("program accounts filter must set exactly one of dataSize or memcmp")
 	}
 	if filter.Memcmp != nil {
-		return json.Marshal(struct {
+		return jsonrpc.Marshal(struct {
 			Memcmp *MemcmpFilter `json:"memcmp"`
 		}{Memcmp: filter.Memcmp})
 	}
-	return json.Marshal(struct {
+	return jsonrpc.Marshal(struct {
 		DataSize uint64 `json:"dataSize"`
 	}{DataSize: filter.DataSize})
 }
@@ -214,7 +214,7 @@ func (filter TokenAccountsFilter) MarshalJSON() ([]byte, error) {
 		return nil, fmt.Errorf("token accounts filter must set exactly one of mint or programId")
 	}
 	type tokenAccountsFilter TokenAccountsFilter
-	return json.Marshal(tokenAccountsFilter(filter))
+	return jsonrpc.Marshal(tokenAccountsFilter(filter))
 }
 
 // SimulateTransactionAccounts requests account snapshots from simulateTransaction.
@@ -236,7 +236,7 @@ func (slotRange BlockProductionRange) MarshalJSON() ([]byte, error) {
 	if slotRange.LastSlot != 0 || slotRange.LastSlotSet {
 		lastSlot = &slotRange.LastSlot
 	}
-	return json.Marshal(struct {
+	return jsonrpc.Marshal(struct {
 		FirstSlot model.Slot  `json:"firstSlot"`
 		LastSlot  *model.Slot `json:"lastSlot,omitempty"`
 	}{FirstSlot: slotRange.FirstSlot, LastSlot: lastSlot})
@@ -263,14 +263,14 @@ func (filter BlockSubscribeFilter) MarshalJSON() ([]byte, error) {
 		return nil, fmt.Errorf("block subscribe filter must set either kind or mentionsAccountOrProgram, not both")
 	}
 	if filter.MentionsAccountOrProgram != "" {
-		return json.Marshal(struct {
+		return jsonrpc.Marshal(struct {
 			MentionsAccountOrProgram string `json:"mentionsAccountOrProgram"`
 		}{MentionsAccountOrProgram: filter.MentionsAccountOrProgram})
 	}
 	if filter.Kind != BlockSubscribeAll {
 		return nil, fmt.Errorf("block subscribe filter kind %q is invalid", filter.Kind)
 	}
-	return json.Marshal(filter.Kind)
+	return jsonrpc.Marshal(filter.Kind)
 }
 
 // LogsSubscribeFilterKind selects the stream scope for logsSubscribe.
@@ -295,14 +295,14 @@ func (filter LogsSubscribeFilter) MarshalJSON() ([]byte, error) {
 		if len(filter.Mentions) != 1 || filter.Mentions[0] == "" {
 			return nil, fmt.Errorf("logs subscribe mentions filter must contain exactly one non-empty pubkey")
 		}
-		return json.Marshal(struct {
+		return jsonrpc.Marshal(struct {
 			Mentions []string `json:"mentions"`
 		}{Mentions: filter.Mentions})
 	}
 	if filter.Kind != LogsSubscribeAll && filter.Kind != LogsSubscribeAllWithVotes {
 		return nil, fmt.Errorf("logs subscribe filter kind %q is invalid", filter.Kind)
 	}
-	return json.Marshal(filter.Kind)
+	return jsonrpc.Marshal(filter.Kind)
 }
 
 type GetAccountInfoQuery struct {
@@ -464,7 +464,7 @@ func (query SendTransactionQuery) MarshalJSON() ([]byte, error) {
 	if query.MaxRetries != 0 || query.MaxRetriesSet {
 		maxRetries = &query.MaxRetries
 	}
-	return json.Marshal(struct {
+	return jsonrpc.Marshal(struct {
 		SkipPreflight       bool             `json:"skipPreflight,omitempty"`
 		PreflightCommitment model.Commitment `json:"preflightCommitment,omitempty"`
 		Encoding            Encoding         `json:"encoding,omitempty"`
@@ -520,7 +520,7 @@ func (query GetBlockProductionQuery) MarshalJSON() ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return json.Marshal(struct {
+	return jsonrpc.Marshal(struct {
 		Identity   string                `json:"identity,omitempty"`
 		Range      *BlockProductionRange `json:"range,omitempty"`
 		Commitment model.Commitment      `json:"commitment,omitempty"`
@@ -579,7 +579,7 @@ func (query GetInflationRewardQuery) MarshalJSON() ([]byte, error) {
 	if query.Epoch != 0 || query.EpochSet {
 		epoch = &query.Epoch
 	}
-	return json.Marshal(struct {
+	return jsonrpc.Marshal(struct {
 		Epoch          *uint64          `json:"epoch,omitempty"`
 		Commitment     model.Commitment `json:"commitment,omitempty"`
 		MinContextSlot model.Slot       `json:"minContextSlot,omitempty"`

@@ -1,7 +1,6 @@
 package jsonrpc
 
 import (
-	"encoding/json"
 	"fmt"
 )
 
@@ -27,7 +26,7 @@ func BuildRequest(id uint, method string, params []any) ([]byte, error) {
 		params = []any{}
 	}
 
-	paramsJSON, err := json.Marshal(params)
+	paramsJSON, err := Marshal(params)
 	if err != nil {
 		return nil, err
 	}
@@ -63,13 +62,13 @@ func parseResult(response []byte, stripString bool, nullAsNil bool) ([]byte, err
 	}
 
 	var summary struct {
-		Result json.RawMessage `json:"result"`
-		Error  *Error          `json:"error"`
+		Result RawMessage `json:"result"`
+		Error  *Error     `json:"error"`
 		Params struct {
 			Error *Error `json:"error"`
 		} `json:"params"`
 	}
-	if err := json.Unmarshal(response, &summary); err != nil {
+	if err := Unmarshal(response, &summary); err != nil {
 		return nil, err
 	}
 
@@ -94,7 +93,7 @@ func parseResult(response []byte, stripString bool, nullAsNil bool) ([]byte, err
 
 	if stripString && summary.Result[0] == '"' {
 		var value string
-		if err := json.Unmarshal(summary.Result, &value); err != nil {
+		if err := Unmarshal(summary.Result, &value); err != nil {
 			return nil, err
 		}
 		return []byte(value), nil
@@ -106,11 +105,11 @@ func parseResult(response []byte, stripString bool, nullAsNil bool) ([]byte, err
 func ParseSubscriptionResult(request []byte) ([]byte, error) {
 	var summary struct {
 		Params struct {
-			Result json.RawMessage `json:"result,omitempty"`
+			Result RawMessage `json:"result,omitempty"`
 		} `json:"params,omitempty"`
 	}
 
-	if err := json.Unmarshal(request, &summary); err != nil {
+	if err := Unmarshal(request, &summary); err != nil {
 		return nil, err
 	}
 
@@ -125,7 +124,7 @@ func ParseMessageID(response []byte) (MessageID, error) {
 		} `json:"params,omitempty"`
 	}
 
-	if err := json.Unmarshal(response, &summary); err != nil {
+	if err := Unmarshal(response, &summary); err != nil {
 		return MessageID{}, err
 	}
 

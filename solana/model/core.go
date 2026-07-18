@@ -2,8 +2,9 @@
 package model
 
 import (
-	"encoding/json"
 	"time"
+
+	"github.com/0x626f/ingress/jsonrpc"
 )
 
 // Commitment represents the commitment level for Solana RPC requests.
@@ -71,12 +72,12 @@ type ContextResult[T any] struct {
 // Account is a Solana account object. Data is raw because its JSON shape
 // depends on the requested encoding.
 type Account struct {
-	Lamports   Lamports        `json:"lamports"`
-	Owner      string          `json:"owner"`
-	Data       json.RawMessage `json:"data"`
-	Executable bool            `json:"executable"`
-	RentEpoch  uint64          `json:"rentEpoch"`
-	Space      uint64          `json:"space,omitempty"`
+	Lamports   Lamports           `json:"lamports"`
+	Owner      string             `json:"owner"`
+	Data       jsonrpc.RawMessage `json:"data"`
+	Executable bool               `json:"executable"`
+	RentEpoch  uint64             `json:"rentEpoch"`
+	Space      uint64             `json:"space,omitempty"`
 }
 
 // AccountInfo is the result of getAccountInfo or accountSubscribe.
@@ -167,12 +168,12 @@ type RecentPrioritizationFees []RecentPrioritizationFee
 
 // SignatureInfo is one signature record returned by getSignaturesForAddress.
 type SignatureInfo struct {
-	Signature          string          `json:"signature"`
-	Slot               Slot            `json:"slot"`
-	Err                json.RawMessage `json:"err"`
-	Memo               *string         `json:"memo"`
-	BlockTime          *UnixTimestamp  `json:"blockTime"`
-	ConfirmationStatus *string         `json:"confirmationStatus,omitempty"`
+	Signature          string             `json:"signature"`
+	Slot               Slot               `json:"slot"`
+	Err                jsonrpc.RawMessage `json:"err"`
+	Memo               *string            `json:"memo"`
+	BlockTime          *UnixTimestamp     `json:"blockTime"`
+	ConfirmationStatus *string            `json:"confirmationStatus,omitempty"`
 }
 
 // SignaturesForAddress is the result of getSignaturesForAddress.
@@ -180,11 +181,11 @@ type SignaturesForAddress []SignatureInfo
 
 // SignatureStatus is one status returned by getSignatureStatuses.
 type SignatureStatus struct {
-	Slot               Slot            `json:"slot"`
-	Confirmations      *uint64         `json:"confirmations"`
-	Err                json.RawMessage `json:"err"`
-	ConfirmationStatus *string         `json:"confirmationStatus,omitempty"`
-	Status             json.RawMessage `json:"status,omitempty"`
+	Slot               Slot               `json:"slot"`
+	Confirmations      *uint64            `json:"confirmations"`
+	Err                jsonrpc.RawMessage `json:"err"`
+	ConfirmationStatus *string            `json:"confirmationStatus,omitempty"`
+	Status             jsonrpc.RawMessage `json:"status,omitempty"`
 }
 
 // SignatureStatuses is the result of getSignatureStatuses.
@@ -196,11 +197,11 @@ type BlockhashValid = ContextResult[bool]
 // Transaction is a Solana transaction response. The Transaction and Meta fields
 // are raw because their JSON shape varies with encoding and transaction version.
 type Transaction struct {
-	Slot        Slot            `json:"slot"`
-	BlockTime   *UnixTimestamp  `json:"blockTime"`
-	Transaction json.RawMessage `json:"transaction"`
-	Meta        json.RawMessage `json:"meta"`
-	Version     json.RawMessage `json:"version,omitempty"`
+	Slot        Slot               `json:"slot"`
+	BlockTime   *UnixTimestamp     `json:"blockTime"`
+	Transaction jsonrpc.RawMessage `json:"transaction"`
+	Meta        jsonrpc.RawMessage `json:"meta"`
+	Version     jsonrpc.RawMessage `json:"version,omitempty"`
 }
 
 // SimulatedTransaction is the result of simulateTransaction.
@@ -208,12 +209,12 @@ type SimulatedTransaction = ContextResult[SimulatedTransactionValue]
 
 // SimulatedTransactionValue contains transaction simulation output.
 type SimulatedTransactionValue struct {
-	Err                  json.RawMessage       `json:"err"`
+	Err                  jsonrpc.RawMessage    `json:"err"`
 	Logs                 []string              `json:"logs"`
-	Accounts             []json.RawMessage     `json:"accounts,omitempty"`
+	Accounts             []jsonrpc.RawMessage  `json:"accounts,omitempty"`
 	UnitsConsumed        *uint64               `json:"unitsConsumed,omitempty"`
 	ReturnData           *ReturnData           `json:"returnData,omitempty"`
-	InnerInstructions    json.RawMessage       `json:"innerInstructions,omitempty"`
+	InnerInstructions    jsonrpc.RawMessage    `json:"innerInstructions,omitempty"`
 	ReplacementBlockhash *LatestBlockhashValue `json:"replacementBlockhash,omitempty"`
 }
 
@@ -226,14 +227,14 @@ type ReturnData struct {
 // Block is a Solana block returned by getBlock. Transactions are raw because
 // they may be encoded, parsed, or signature-only depending on configuration.
 type Block struct {
-	Blockhash         string          `json:"blockhash"`
-	PreviousBlockhash string          `json:"previousBlockhash"`
-	ParentSlot        Slot            `json:"parentSlot"`
-	Transactions      json.RawMessage `json:"transactions,omitempty"`
-	Signatures        []string        `json:"signatures,omitempty"`
-	Rewards           []Reward        `json:"rewards,omitempty"`
-	BlockTime         *UnixTimestamp  `json:"blockTime"`
-	BlockHeight       *uint64         `json:"blockHeight"`
+	Blockhash         string             `json:"blockhash"`
+	PreviousBlockhash string             `json:"previousBlockhash"`
+	ParentSlot        Slot               `json:"parentSlot"`
+	Transactions      jsonrpc.RawMessage `json:"transactions,omitempty"`
+	Signatures        []string           `json:"signatures,omitempty"`
+	Rewards           []Reward           `json:"rewards,omitempty"`
+	BlockTime         *UnixTimestamp     `json:"blockTime"`
+	BlockHeight       *uint64            `json:"blockHeight"`
 }
 
 // Reward describes a reward entry returned by getBlock and inflation endpoints.
@@ -430,9 +431,9 @@ type LogsUpdate = ContextResult[LogsValue]
 
 // LogsValue contains a transaction log notification.
 type LogsValue struct {
-	Signature string          `json:"signature"`
-	Err       json.RawMessage `json:"err"`
-	Logs      []string        `json:"logs"`
+	Signature string             `json:"signature"`
+	Err       jsonrpc.RawMessage `json:"err"`
+	Logs      []string           `json:"logs"`
 }
 
 // ProgramUpdate is emitted by programSubscribe.
@@ -443,7 +444,7 @@ type SignatureUpdate = ContextResult[SignatureNotification]
 
 // SignatureNotification contains the signature subscription status.
 type SignatureNotification struct {
-	Err json.RawMessage `json:"err"`
+	Err jsonrpc.RawMessage `json:"err"`
 }
 
 // SlotsUpdate is emitted by slotsUpdatesSubscribe.

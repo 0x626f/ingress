@@ -1,11 +1,11 @@
 package rpc
 
 import (
-	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
 
+	"github.com/0x626f/ingress/jsonrpc"
 	"github.com/holiman/uint256"
 )
 
@@ -60,7 +60,7 @@ func stringToHexOrDefault(s string) string {
 // GetTransactionByHash, GetTransactionReceipt, and GetBlockByNumber.
 func ParseRawValue[T any](data []byte) (T, error) {
 	var result T
-	err := json.Unmarshal(data, &result)
+	err := jsonrpc.Unmarshal(data, &result)
 	return result, err
 }
 

@@ -1,8 +1,9 @@
 package rpc
 
 import (
-	"encoding/json"
 	"fmt"
+
+	"github.com/0x626f/ingress/jsonrpc"
 )
 
 func requireString(name, value string) error {
@@ -25,7 +26,7 @@ func requireStrings(name string, values []string) error {
 }
 
 func validateTokenAccountsFilter(filter TokenAccountsFilter) error {
-	if _, err := json.Marshal(filter); err != nil {
+	if _, err := jsonrpc.Marshal(filter); err != nil {
 		return fmt.Errorf("solana rpc: %w", err)
 	}
 	return nil
@@ -33,7 +34,7 @@ func validateTokenAccountsFilter(filter TokenAccountsFilter) error {
 
 func validateProgramAccountFilters(filters []ProgramAccountsFilter) error {
 	for index, filter := range filters {
-		if _, err := json.Marshal(filter); err != nil {
+		if _, err := jsonrpc.Marshal(filter); err != nil {
 			return fmt.Errorf("solana rpc: filters[%d]: %w", index, err)
 		}
 		if filter.Memcmp != nil && filter.Memcmp.Bytes == "" {
@@ -51,14 +52,14 @@ func validateSimulationAccounts(accounts *SimulateTransactionAccounts) error {
 }
 
 func validateBlockSubscribeFilter(filter BlockSubscribeFilter) error {
-	if _, err := json.Marshal(filter); err != nil {
+	if _, err := jsonrpc.Marshal(filter); err != nil {
 		return fmt.Errorf("solana rpc: %w", err)
 	}
 	return nil
 }
 
 func validateLogsSubscribeFilter(filter LogsSubscribeFilter) error {
-	if _, err := json.Marshal(filter); err != nil {
+	if _, err := jsonrpc.Marshal(filter); err != nil {
 		return fmt.Errorf("solana rpc: %w", err)
 	}
 	return nil

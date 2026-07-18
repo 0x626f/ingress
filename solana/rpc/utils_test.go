@@ -2,9 +2,9 @@ package rpc
 
 import (
 	"bytes"
-	"encoding/json"
 	"testing"
 
+	"github.com/0x626f/ingress/jsonrpc"
 	"github.com/0x626f/ingress/solana/model"
 )
 
@@ -106,7 +106,7 @@ func TestBase58EncodedValue(t *testing.T) {
 		t.Fatalf("expected base58 encoding, got %q", value[1])
 	}
 
-	encoded, err := json.Marshal(value)
+	encoded, err := jsonrpc.Marshal(value)
 	if err != nil {
 		t.Fatalf("Marshal: %v", err)
 	}

@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/0x626f/ingress/jsonrpc"
 	"github.com/0x626f/ingress/transport"
-	"github.com/bytedance/sonic"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -58,7 +58,7 @@ type proxyCall struct {
 }
 
 func proxyKey(method string, query any) string {
-	data, err := sonic.Marshal(proxyCall{Method: method, Query: query})
+	data, err := jsonrpc.Marshal(proxyCall{Method: method, Query: query})
 	if err != nil {
 		return fmt.Sprintf("%s:%#v", method, query)
 	}

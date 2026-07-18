@@ -2,12 +2,12 @@ package rpc
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
 	"time"
 
+	"github.com/0x626f/ingress/jsonrpc"
 	"github.com/0x626f/ingress/transport"
 )
 
@@ -49,16 +49,16 @@ func rpcErrResp(id uint, code int, message string) []byte {
 }
 
 type rpcRequest struct {
-	Jsonrpc string          `json:"jsonrpc"`
-	ID      uint            `json:"id"`
-	Method  string          `json:"method"`
-	Params  json.RawMessage `json:"params"`
+	Jsonrpc string             `json:"jsonrpc"`
+	ID      uint               `json:"id"`
+	Method  string             `json:"method"`
+	Params  jsonrpc.RawMessage `json:"params"`
 }
 
 func parseReq(t *testing.T, payload []byte) rpcRequest {
 	t.Helper()
 	var req rpcRequest
-	if err := json.Unmarshal(payload, &req); err != nil {
+	if err := jsonrpc.Unmarshal(payload, &req); err != nil {
 		t.Fatalf("failed to parse RPC request: %v\npayload: %s", err, payload)
 	}
 	return req
@@ -112,7 +112,7 @@ func (m *mockWSConnection) Send(ctx context.Context, data []byte) ([]byte, error
 	var req struct {
 		ID uint `json:"id"`
 	}
-	json.Unmarshal(data, &req)
+	jsonrpc.Unmarshal(data, &req)
 	resp := rpcResp(req.ID, m.result)
 	go func() { m.events <- resp }()
 	return nil, nil
@@ -244,7 +244,7 @@ func TestClient_ChainId_Method(t *testing.T) {
 		t.Errorf("expected eth_chainId, got %s", req.Method)
 	}
 	var params []any
-	json.Unmarshal(req.Params, &params)
+	jsonrpc.Unmarshal(req.Params, &params)
 	if len(params) != 0 {
 		t.Errorf("expected no params, got %v", params)
 	}
@@ -278,7 +278,7 @@ func TestClient_GetBalance_DefaultBlockLatest(t *testing.T) {
 		t.Errorf("expected eth_getBalance, got %s", req.Method)
 	}
 	var params []string
-	json.Unmarshal(req.Params, &params)
+	jsonrpc.Unmarshal(req.Params, &params)
 	if len(params) != 2 || params[0] != "0xABC" || params[1] != BlockTagLatest {
 		t.Errorf("expected [0xABC, latest], got %v", params)
 	}
@@ -291,7 +291,7 @@ func TestClient_GetBalance_CustomBlockTag(t *testing.T) {
 		Address:      "0xABC",
 	}})
 	var params []string
-	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
+	jsonrpc.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
 	if params[1] != BlockTagEarliest {
 		t.Errorf("expected 'earliest', got %q", params[1])
 	}
@@ -309,7 +309,7 @@ func TestClient_GetCode_MethodAndParams(t *testing.T) {
 		t.Errorf("expected eth_getCode, got %s", req.Method)
 	}
 	var params []string
-	json.Unmarshal(req.Params, &params)
+	jsonrpc.Unmarshal(req.Params, &params)
 	if len(params) != 2 || params[0] != "0xDEF" || params[1] != BlockTagLatest {
 		t.Errorf("expected [0xDEF, latest], got %v", params)
 	}
@@ -327,7 +327,7 @@ func TestClient_GetStorageAt_PreservesExplicitHexZeroSlot(t *testing.T) {
 	}
 
 	var params []string
-	if err := json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params); err != nil {
+	if err := jsonrpc.Unmarshal(parseReq(t, conn.lastPayload).Params, &params); err != nil {
 		t.Fatal(err)
 	}
 	want := []string{validAddress, "0x0", BlockTagLatest}
@@ -349,7 +349,7 @@ func TestClient_GetStorageAt_ConvertsDecimalZeroSlot(t *testing.T) {
 	}
 
 	var params []string
-	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
+	jsonrpc.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
 	if params[1] != "0x0" {
 		t.Fatalf("expected decimal zero slot to serialize as 0x0, got %q", params[1])
 	}
@@ -370,18 +370,18 @@ func TestClient_Call_MethodAndParams(t *testing.T) {
 	if req.Method != "eth_call" {
 		t.Errorf("expected eth_call, got %s", req.Method)
 	}
-	var params []json.RawMessage
-	json.Unmarshal(req.Params, &params)
+	var params []jsonrpc.RawMessage
+	jsonrpc.Unmarshal(req.Params, &params)
 	if len(params) != 2 {
 		t.Fatalf("expected 2 params, got %d", len(params))
 	}
 	var callObj map[string]string
-	json.Unmarshal(params[0], &callObj)
+	jsonrpc.Unmarshal(params[0], &callObj)
 	if callObj["to"] != validAddress || callObj["data"] != "0xdeadbeef" {
 		t.Errorf("unexpected call object: %v", callObj)
 	}
 	var blockTag string
-	json.Unmarshal(params[1], &blockTag)
+	jsonrpc.Unmarshal(params[1], &blockTag)
 	if blockTag != BlockTagLatest {
 		t.Errorf("expected block tag 'latest', got %q", blockTag)
 	}
@@ -393,22 +393,22 @@ func TestClient_Call_OmitsUnsetOptionalFields(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var params []json.RawMessage
-	if err := json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params); err != nil {
+	var params []jsonrpc.RawMessage
+	if err := jsonrpc.Unmarshal(parseReq(t, conn.lastPayload).Params, &params); err != nil {
 		t.Fatal(err)
 	}
 	if len(params) != 2 {
 		t.Fatalf("expected transaction object and compatible default block, got %d params", len(params))
 	}
-	var callObj map[string]json.RawMessage
-	if err := json.Unmarshal(params[0], &callObj); err != nil {
+	var callObj map[string]jsonrpc.RawMessage
+	if err := jsonrpc.Unmarshal(params[0], &callObj); err != nil {
 		t.Fatal(err)
 	}
 	if len(callObj) != 0 {
 		t.Fatalf("expected unset optional call fields to be absent, got %s", params[0])
 	}
 	var block string
-	json.Unmarshal(params[1], &block)
+	jsonrpc.Unmarshal(params[1], &block)
 	if block != BlockTagLatest {
 		t.Fatalf("expected compatible latest block default, got %q", block)
 	}
@@ -420,15 +420,15 @@ func TestClient_Call_ContractCreationOmitsTo(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var params []json.RawMessage
-	if err := json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params); err != nil {
+	var params []jsonrpc.RawMessage
+	if err := jsonrpc.Unmarshal(parseReq(t, conn.lastPayload).Params, &params); err != nil {
 		t.Fatal(err)
 	}
 	if len(params) != 2 {
 		t.Fatalf("expected transaction object and block param, got %d params", len(params))
 	}
 	var callObj map[string]string
-	if err := json.Unmarshal(params[0], &callObj); err != nil {
+	if err := jsonrpc.Unmarshal(params[0], &callObj); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := callObj["to"]; ok {
@@ -445,12 +445,12 @@ func TestClient_Call_PreservesZeroAddress(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var params []json.RawMessage
-	if err := json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params); err != nil {
+	var params []jsonrpc.RawMessage
+	if err := jsonrpc.Unmarshal(parseReq(t, conn.lastPayload).Params, &params); err != nil {
 		t.Fatal(err)
 	}
 	var callObj map[string]string
-	json.Unmarshal(params[0], &callObj)
+	jsonrpc.Unmarshal(params[0], &callObj)
 	if callObj["to"] != zeroAddress {
 		t.Fatalf("expected zero address to be preserved, got %q", callObj["to"])
 	}
@@ -459,10 +459,10 @@ func TestClient_Call_PreservesZeroAddress(t *testing.T) {
 func TestClient_Call_CustomBlockTag(t *testing.T) {
 	conn := okHTTP()
 	withHTTP(conn).Call(context.Background(), CallQuery{OnBlockQuery: OnBlockQuery{BlockTag: "pending"}, To: "0x0"})
-	var params []json.RawMessage
-	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
+	var params []jsonrpc.RawMessage
+	jsonrpc.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
 	var tag string
-	json.Unmarshal(params[1], &tag)
+	jsonrpc.Unmarshal(params[1], &tag)
 	if tag != "pending" {
 		t.Errorf("expected 'pending', got %q", tag)
 	}
@@ -479,10 +479,10 @@ func TestClient_EstimateGas_NonEmptyToIsSerialized(t *testing.T) {
 	if req.Method != "eth_estimateGas" {
 		t.Errorf("expected eth_estimateGas, got %s", req.Method)
 	}
-	var params []json.RawMessage
-	json.Unmarshal(req.Params, &params)
+	var params []jsonrpc.RawMessage
+	jsonrpc.Unmarshal(req.Params, &params)
 	var callObj map[string]string
-	json.Unmarshal(params[0], &callObj)
+	jsonrpc.Unmarshal(params[0], &callObj)
 	if callObj["to"] != validAddress {
 		t.Errorf("expected to=%q, got %q", validAddress, callObj["to"])
 	}
@@ -500,15 +500,15 @@ func TestClient_EstimateGas_ContractCreationOmitsTo(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var params []json.RawMessage
-	if err := json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params); err != nil {
+	var params []jsonrpc.RawMessage
+	if err := jsonrpc.Unmarshal(parseReq(t, conn.lastPayload).Params, &params); err != nil {
 		t.Fatal(err)
 	}
 	if len(params) != 2 {
 		t.Fatalf("expected transaction object and compatible default block, got %d params", len(params))
 	}
 	var callObj map[string]string
-	if err := json.Unmarshal(params[0], &callObj); err != nil {
+	if err := jsonrpc.Unmarshal(params[0], &callObj); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := callObj["to"]; ok {
@@ -525,8 +525,8 @@ func TestClient_EstimateGas_OmitsEveryUnsetOptionalField(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var params []json.RawMessage
-	if err := json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params); err != nil {
+	var params []jsonrpc.RawMessage
+	if err := jsonrpc.Unmarshal(parseReq(t, conn.lastPayload).Params, &params); err != nil {
 		t.Fatal(err)
 	}
 	if len(params) != 2 || string(params[0]) != "{}" {
@@ -547,10 +547,10 @@ func TestClient_EstimateGas_AllFields_HexEncoded(t *testing.T) {
 		Value:                "1000000000000000000",
 		Nonce:                "5",
 	})
-	var params []json.RawMessage
-	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
+	var params []jsonrpc.RawMessage
+	jsonrpc.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
 	var obj map[string]string
-	json.Unmarshal(params[0], &obj)
+	jsonrpc.Unmarshal(params[0], &obj)
 
 	cases := map[string]string{
 		"from":                 "0xFrom",
@@ -583,10 +583,10 @@ func TestClient_EstimateGas_PreservesExplicitHexZeroQuantities(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var params []json.RawMessage
-	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
+	var params []jsonrpc.RawMessage
+	jsonrpc.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
 	var callObj map[string]string
-	json.Unmarshal(params[0], &callObj)
+	jsonrpc.Unmarshal(params[0], &callObj)
 	for _, field := range []string{"gas", "gasPrice", "maxFeePerGas", "maxPriorityFeePerGas", "value", "nonce"} {
 		if callObj[field] != "0x0" {
 			t.Errorf("expected %s=0x0, got %q", field, callObj[field])
@@ -600,12 +600,12 @@ func TestClient_EstimateGas_PreservesZeroAddresses(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var params []json.RawMessage
-	if err := json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params); err != nil {
+	var params []jsonrpc.RawMessage
+	if err := jsonrpc.Unmarshal(parseReq(t, conn.lastPayload).Params, &params); err != nil {
 		t.Fatal(err)
 	}
 	var callObj map[string]string
-	json.Unmarshal(params[0], &callObj)
+	jsonrpc.Unmarshal(params[0], &callObj)
 	if callObj["to"] != zeroAddress || callObj["from"] != zeroAddress {
 		t.Fatalf("expected zero addresses to be preserved, got %v", callObj)
 	}
@@ -617,13 +617,13 @@ func TestClient_EstimateGas_DefaultsUnsetBlockAndSerializesExplicitBlock(t *test
 	if _, err := client.EstimateGas(context.Background(), EstimateGasQuery{}); err != nil {
 		t.Fatal(err)
 	}
-	var params []json.RawMessage
-	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
+	var params []jsonrpc.RawMessage
+	jsonrpc.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
 	if len(params) != 2 {
 		t.Fatalf("expected compatible default block selector, got %s", parseReq(t, conn.lastPayload).Params)
 	}
 	var tag string
-	json.Unmarshal(params[1], &tag)
+	jsonrpc.Unmarshal(params[1], &tag)
 	if tag != BlockTagLatest {
 		t.Fatalf("expected latest default block, got %q", tag)
 	}
@@ -631,11 +631,11 @@ func TestClient_EstimateGas_DefaultsUnsetBlockAndSerializesExplicitBlock(t *test
 	if _, err := client.EstimateGas(context.Background(), EstimateGasQuery{OnBlockQuery: OnBlockQuery{BlockTag: BlockTagPending}}); err != nil {
 		t.Fatal(err)
 	}
-	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
+	jsonrpc.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
 	if len(params) != 2 {
 		t.Fatalf("expected explicit block selector, got %s", parseReq(t, conn.lastPayload).Params)
 	}
-	json.Unmarshal(params[1], &tag)
+	jsonrpc.Unmarshal(params[1], &tag)
 	if tag != BlockTagPending {
 		t.Fatalf("expected pending block, got %q", tag)
 	}
@@ -653,7 +653,7 @@ func TestClient_SendRawTransaction_MethodAndParams(t *testing.T) {
 		t.Errorf("expected eth_sendRawTransaction, got %s", req.Method)
 	}
 	var params []string
-	json.Unmarshal(req.Params, &params)
+	jsonrpc.Unmarshal(req.Params, &params)
 	if len(params) != 1 || params[0] != "0xSignedTx" {
 		t.Errorf("expected ['0xSignedTx'], got %v", params)
 	}
@@ -671,7 +671,7 @@ func TestClient_GetTransactionByHash_MethodAndParams(t *testing.T) {
 		t.Errorf("expected eth_getTransactionByHash, got %s", req.Method)
 	}
 	var params []string
-	json.Unmarshal(req.Params, &params)
+	jsonrpc.Unmarshal(req.Params, &params)
 	if len(params) != 1 || params[0] != "0xHash" {
 		t.Errorf("expected ['0xHash'], got %v", params)
 	}
@@ -689,7 +689,7 @@ func TestClient_GetTransactionReceipt_MethodAndParams(t *testing.T) {
 		t.Errorf("expected eth_getTransactionReceipt, got %s", req.Method)
 	}
 	var params []string
-	json.Unmarshal(req.Params, &params)
+	jsonrpc.Unmarshal(req.Params, &params)
 	if len(params) != 1 || params[0] != "0xHash" {
 		t.Errorf("expected ['0xHash'], got %v", params)
 	}
@@ -707,7 +707,7 @@ func TestClient_GetTransactionCount_MethodAndParams(t *testing.T) {
 		t.Errorf("expected eth_getTransactionCount, got %s", req.Method)
 	}
 	var params []string
-	json.Unmarshal(req.Params, &params)
+	jsonrpc.Unmarshal(req.Params, &params)
 	if len(params) < 2 || params[0] != "0xAddr" || params[1] != BlockTagLatest {
 		t.Errorf("expected ['0xAddr', 'latest'], got %v", params)
 	}
@@ -724,10 +724,10 @@ func TestClient_GetBlockByNumber_DefaultsToLatest(t *testing.T) {
 	if req.Method != "eth_getBlockByNumber" {
 		t.Errorf("expected eth_getBlockByNumber, got %s", req.Method)
 	}
-	var params []json.RawMessage
-	json.Unmarshal(req.Params, &params)
+	var params []jsonrpc.RawMessage
+	jsonrpc.Unmarshal(req.Params, &params)
 	var tag string
-	json.Unmarshal(params[0], &tag)
+	jsonrpc.Unmarshal(params[0], &tag)
 	if tag != BlockTagLatest {
 		t.Errorf("expected 'latest', got %q", tag)
 	}
@@ -736,10 +736,10 @@ func TestClient_GetBlockByNumber_DefaultsToLatest(t *testing.T) {
 func TestClient_GetBlockByNumber_NumberConvertedToHex(t *testing.T) {
 	conn := okHTTP()
 	withHTTP(conn).GetBlockByNumber(context.Background(), BlockQuery{Number: "1000"})
-	var params []json.RawMessage
-	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
+	var params []jsonrpc.RawMessage
+	jsonrpc.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
 	var tag string
-	json.Unmarshal(params[0], &tag)
+	jsonrpc.Unmarshal(params[0], &tag)
 	if tag != "0x3e8" {
 		t.Errorf("expected '0x3e8' (1000), got %q", tag)
 	}
@@ -750,10 +750,10 @@ func TestClient_GetBlockByNumber_PreservesExplicitHexZero(t *testing.T) {
 	if _, err := withHTTP(conn).GetBlockByNumber(context.Background(), BlockQuery{Number: "0x0"}); err != nil {
 		t.Fatal(err)
 	}
-	var params []json.RawMessage
-	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
+	var params []jsonrpc.RawMessage
+	jsonrpc.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
 	var tag string
-	json.Unmarshal(params[0], &tag)
+	jsonrpc.Unmarshal(params[0], &tag)
 	if tag != "0x0" {
 		t.Fatalf("expected explicit block number 0x0 to be preserved, got %q", tag)
 	}
@@ -765,10 +765,10 @@ func TestClient_GetBlockByNumber_NumberOverridesBlockTag(t *testing.T) {
 		OnBlockQuery: OnBlockQuery{BlockTag: BlockTagLatest},
 		Number:       "100",
 	})
-	var params []json.RawMessage
-	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
+	var params []jsonrpc.RawMessage
+	jsonrpc.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
 	var tag string
-	json.Unmarshal(params[0], &tag)
+	jsonrpc.Unmarshal(params[0], &tag)
 	if tag != "0x64" {
 		t.Errorf("expected Number to override BlockTag, got %q", tag)
 	}
@@ -777,10 +777,10 @@ func TestClient_GetBlockByNumber_NumberOverridesBlockTag(t *testing.T) {
 func TestClient_GetBlockByNumber_BlockTagPropagated(t *testing.T) {
 	conn := okHTTP()
 	withHTTP(conn).GetBlockByNumber(context.Background(), BlockQuery{OnBlockQuery: OnBlockQuery{BlockTag: BlockTagFinalized}})
-	var params []json.RawMessage
-	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
+	var params []jsonrpc.RawMessage
+	jsonrpc.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
 	var tag string
-	json.Unmarshal(params[0], &tag)
+	jsonrpc.Unmarshal(params[0], &tag)
 	if tag != BlockTagFinalized {
 		t.Errorf("expected 'finalized', got %q", tag)
 	}
@@ -789,13 +789,13 @@ func TestClient_GetBlockByNumber_BlockTagPropagated(t *testing.T) {
 func TestClient_GetBlockByNumber_FullTransactions(t *testing.T) {
 	conn := okHTTP()
 	withHTTP(conn).GetBlockByNumber(context.Background(), BlockQuery{FullTransactions: true})
-	var params []json.RawMessage
-	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
+	var params []jsonrpc.RawMessage
+	jsonrpc.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
 	if len(params) < 2 {
 		t.Fatal("expected 2 params")
 	}
 	var full bool
-	json.Unmarshal(params[1], &full)
+	jsonrpc.Unmarshal(params[1], &full)
 	if !full {
 		t.Error("expected FullTransactions=true as second param")
 	}
@@ -812,10 +812,10 @@ func TestClient_GetBlockByHash_UsesHash(t *testing.T) {
 	if req.Method != "eth_getBlockByHash" {
 		t.Errorf("expected eth_getBlockByHash, got %s", req.Method)
 	}
-	var params []json.RawMessage
-	json.Unmarshal(req.Params, &params)
+	var params []jsonrpc.RawMessage
+	jsonrpc.Unmarshal(req.Params, &params)
 	var hash string
-	json.Unmarshal(params[0], &hash)
+	jsonrpc.Unmarshal(params[0], &hash)
 	if hash != "0xBlockHash" {
 		t.Errorf("expected hash='0xBlockHash', got %q", hash)
 	}
@@ -837,8 +837,8 @@ func TestClient_GetBlockByHash_SerializesRequiredFalseBoolean(t *testing.T) {
 	if _, err := withHTTP(conn).GetBlockByHash(context.Background(), BlockQuery{Hash: "0xBlockHash"}); err != nil {
 		t.Fatal(err)
 	}
-	var params []json.RawMessage
-	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
+	var params []jsonrpc.RawMessage
+	jsonrpc.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
 	if len(params) != 2 || string(params[1]) != "false" {
 		t.Fatalf("required hydrated-transactions flag must remain present as false, got %s", parseReq(t, conn.lastPayload).Params)
 	}
@@ -865,10 +865,10 @@ func TestClient_GetLogs_Method(t *testing.T) {
 func TestClient_GetLogs_OmitsUnsetOptionalFields(t *testing.T) {
 	conn := okHTTP()
 	withHTTP(conn).GetLogs(context.Background(), LogsQuery{})
-	var params []json.RawMessage
-	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
-	var filterObj map[string]json.RawMessage
-	json.Unmarshal(params[0], &filterObj)
+	var params []jsonrpc.RawMessage
+	jsonrpc.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
+	var filterObj map[string]jsonrpc.RawMessage
+	jsonrpc.Unmarshal(params[0], &filterObj)
 	if len(filterObj) != 0 {
 		t.Fatalf("expected every unset optional filter field to be absent, got %s", params[0])
 	}
@@ -884,10 +884,10 @@ func TestClient_GetLogs_PreservesExplicitHexZeroBlocksAndZeroAddress(t *testing.
 	if _, err := withHTTP(conn).GetLogs(context.Background(), query); err != nil {
 		t.Fatal(err)
 	}
-	var params []json.RawMessage
-	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
+	var params []jsonrpc.RawMessage
+	jsonrpc.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
 	var filterObj map[string]string
-	if err := json.Unmarshal(params[0], &filterObj); err != nil {
+	if err := jsonrpc.Unmarshal(params[0], &filterObj); err != nil {
 		t.Fatal(err)
 	}
 	if filterObj["fromBlock"] != "0x0" || filterObj["toBlock"] != "0x0" || filterObj["address"] != zeroAddress {
@@ -901,17 +901,17 @@ func TestClient_GetLogs_AddressAndTopics(t *testing.T) {
 		AddressedQuery: AddressedQuery{Address: "0xContract"},
 		Topics:         []string{"0xTopic1", "0xTopic2"},
 	})
-	var params []json.RawMessage
-	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
-	var filterObj map[string]json.RawMessage
-	json.Unmarshal(params[0], &filterObj)
+	var params []jsonrpc.RawMessage
+	jsonrpc.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
+	var filterObj map[string]jsonrpc.RawMessage
+	jsonrpc.Unmarshal(params[0], &filterObj)
 	var address string
-	json.Unmarshal(filterObj["address"], &address)
+	jsonrpc.Unmarshal(filterObj["address"], &address)
 	if address != "0xContract" {
 		t.Errorf("expected address='0xContract', got %q", address)
 	}
 	var topics []string
-	json.Unmarshal(filterObj["topics"], &topics)
+	jsonrpc.Unmarshal(filterObj["topics"], &topics)
 	if len(topics) != 2 {
 		t.Errorf("expected 2 topics, got %d", len(topics))
 	}
@@ -1064,13 +1064,13 @@ func TestWSClient_Subscribe_NewHeads_SendsSingleParam(t *testing.T) {
 	if req.Method != "eth_subscribe" {
 		t.Errorf("expected eth_subscribe, got %s", req.Method)
 	}
-	var params []json.RawMessage
-	json.Unmarshal(req.Params, &params)
+	var params []jsonrpc.RawMessage
+	jsonrpc.Unmarshal(req.Params, &params)
 	if len(params) != 1 {
 		t.Errorf("newHeads must send exactly 1 param (no filter object), got %d", len(params))
 	}
 	var subType string
-	json.Unmarshal(params[0], &subType)
+	jsonrpc.Unmarshal(params[0], &subType)
 	if subType != SubscriptionNewHeads {
 		t.Errorf("expected 'newHeads', got %q", subType)
 	}
@@ -1084,18 +1084,18 @@ func TestWSClient_Subscribe_Logs_IncludesFilterParams(t *testing.T) {
 		Topics:  []string{"0xTopic"},
 	})
 
-	var params []json.RawMessage
-	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
+	var params []jsonrpc.RawMessage
+	jsonrpc.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
 	if len(params) != 2 {
 		t.Fatalf("logs subscription must send 2 params, got %d", len(params))
 	}
 	var subType string
-	json.Unmarshal(params[0], &subType)
+	jsonrpc.Unmarshal(params[0], &subType)
 	if subType != SubscriptionLogs {
 		t.Errorf("expected 'logs', got %q", subType)
 	}
-	var filter map[string]json.RawMessage
-	json.Unmarshal(params[1], &filter)
+	var filter map[string]jsonrpc.RawMessage
+	jsonrpc.Unmarshal(params[1], &filter)
 	if _, ok := filter["address"]; !ok {
 		t.Error("expected 'address' in filter object")
 	}
@@ -1110,12 +1110,12 @@ func TestWSClient_Subscribe_PreservesZeroAddressAndOmitsUnsetTopics(t *testing.T
 		t.Fatal(err)
 	}
 
-	var params []json.RawMessage
-	json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
-	var filter map[string]json.RawMessage
-	json.Unmarshal(params[1], &filter)
+	var params []jsonrpc.RawMessage
+	jsonrpc.Unmarshal(parseReq(t, conn.lastPayload).Params, &params)
+	var filter map[string]jsonrpc.RawMessage
+	jsonrpc.Unmarshal(params[1], &filter)
 	var address string
-	json.Unmarshal(filter["address"], &address)
+	jsonrpc.Unmarshal(filter["address"], &address)
 	if address != zeroAddress {
 		t.Fatalf("expected zero address to be preserved, got %q", address)
 	}
@@ -1338,7 +1338,7 @@ func TestWSClient_GetBalance_CorrectParams(t *testing.T) {
 		t.Errorf("expected eth_getBalance, got %s", req.Method)
 	}
 	var params []string
-	json.Unmarshal(req.Params, &params)
+	jsonrpc.Unmarshal(req.Params, &params)
 	if len(params) != 2 || params[0] != "0xABC" || params[1] != BlockTagLatest {
 		t.Errorf("expected [0xABC, latest], got %v", params)
 	}
@@ -1351,15 +1351,15 @@ func TestWSClient_EstimateGas_UsesSharedOptionalFieldSerialization(t *testing.T)
 		t.Fatal(err)
 	}
 
-	var params []json.RawMessage
-	if err := json.Unmarshal(parseReq(t, conn.lastPayload).Params, &params); err != nil {
+	var params []jsonrpc.RawMessage
+	if err := jsonrpc.Unmarshal(parseReq(t, conn.lastPayload).Params, &params); err != nil {
 		t.Fatal(err)
 	}
 	if len(params) != 2 {
 		t.Fatalf("expected omitted to and compatible default block selector, got %s", parseReq(t, conn.lastPayload).Params)
 	}
 	var callObj map[string]string
-	if err := json.Unmarshal(params[0], &callObj); err != nil {
+	if err := jsonrpc.Unmarshal(params[0], &callObj); err != nil {
 		t.Fatal(err)
 	}
 	if _, ok := callObj["to"]; ok {

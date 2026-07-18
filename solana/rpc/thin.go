@@ -4,7 +4,6 @@ package rpc
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"sync"
 	"time"
@@ -47,9 +46,9 @@ type Event[T any] struct {
 
 // Response represents a JSON-RPC 2.0 response from the Solana node.
 type Response struct {
-	JsonRpc string          `json:"jsonrpc"`
-	Id      int             `json:"id"`
-	Result  json.RawMessage `json:"result"`
+	JsonRpc string             `json:"jsonrpc"`
+	Id      int                `json:"id"`
+	Result  jsonrpc.RawMessage `json:"result"`
 }
 
 func buildRequest(method string, params any) ([]byte, error) {
@@ -84,7 +83,7 @@ func (client *ThinClient) call(ctx context.Context, method string, params any) (
 	if err != nil {
 		return nil, err
 	}
-	return &Response{Result: json.RawMessage(result)}, nil
+	return &Response{Result: jsonrpc.RawMessage(result)}, nil
 }
 
 func (client *ThinClient) callWithManager(ctx context.Context, manager *transport.ConnectionManager, method string, params any) (*Response, error) {
