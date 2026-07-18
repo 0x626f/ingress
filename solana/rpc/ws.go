@@ -171,6 +171,9 @@ func parseSubscriptionResultID(data []byte) (uint64, error) {
 }
 
 func (client *ThinClient) AccountSubscribe(ctx context.Context, query AccountSubscribeQuery) (*Subscription, error) {
+	if err := requireString("account pubkey", query.Pubkey); err != nil {
+		return nil, err
+	}
 	query = normalizeAccountSubscribeQuery(query)
 	return client.RawSubscribe(ctx,
 		RPCMethodAccountSubscribe,
@@ -180,6 +183,9 @@ func (client *ThinClient) AccountSubscribe(ctx context.Context, query AccountSub
 }
 
 func (client *ThinClient) BlockSubscribe(ctx context.Context, query BlockSubscribeQuery) (*Subscription, error) {
+	if err := validateBlockSubscribeFilter(query.Filter); err != nil {
+		return nil, err
+	}
 	return client.RawSubscribe(ctx,
 		RPCMethodBlockSubscribe,
 		RPCMethodBlockUnsubscribe,
@@ -188,6 +194,9 @@ func (client *ThinClient) BlockSubscribe(ctx context.Context, query BlockSubscri
 }
 
 func (client *ThinClient) LogsSubscribe(ctx context.Context, query LogsSubscribeQuery) (*Subscription, error) {
+	if err := validateLogsSubscribeFilter(query.Filter); err != nil {
+		return nil, err
+	}
 	return client.RawSubscribe(ctx,
 		RPCMethodLogsSubscribe,
 		RPCMethodLogsUnsubscribe,
@@ -196,7 +205,13 @@ func (client *ThinClient) LogsSubscribe(ctx context.Context, query LogsSubscribe
 }
 
 func (client *ThinClient) ProgramSubscribe(ctx context.Context, query ProgramSubscribeQuery) (*Subscription, error) {
+	if err := requireString("program id", query.ProgramID); err != nil {
+		return nil, err
+	}
 	query = normalizeProgramSubscribeQuery(query)
+	if err := validateProgramAccountFilters(query.Filters); err != nil {
+		return nil, err
+	}
 	return client.RawSubscribe(ctx,
 		RPCMethodProgramSubscribe,
 		RPCMethodProgramUnsubscribe,
@@ -209,6 +224,9 @@ func (client *ThinClient) RootSubscribe(ctx context.Context) (*Subscription, err
 }
 
 func (client *ThinClient) SignatureSubscribe(ctx context.Context, query SignatureSubscribeQuery) (*Subscription, error) {
+	if err := requireString("transaction signature", query.Signature); err != nil {
+		return nil, err
+	}
 	return client.RawSubscribe(ctx,
 		RPCMethodSignatureSubscribe,
 		RPCMethodSignatureUnsubscribe,

@@ -22,6 +22,18 @@ func TestProxyKey_SerializesMethodAndQuery(t *testing.T) {
 	}
 }
 
+func TestProxyKey_GetBlockProductionUsesNestedCompatibilityRange(t *testing.T) {
+	first := proxyKey("GetBlockProduction", GetBlockProductionQuery{FirstSlot: 10, LastSlot: 20})
+	second := proxyKey("GetBlockProduction", GetBlockProductionQuery{FirstSlot: 11, LastSlot: 20})
+	want := `{"method":"GetBlockProduction","query":{"range":{"firstSlot":10,"lastSlot":20}}}`
+	if first != want {
+		t.Fatalf("unexpected proxy key:\nwant: %s\n got: %s", want, first)
+	}
+	if first == second {
+		t.Fatal("distinct legacy block production ranges produced the same proxy key")
+	}
+}
+
 func TestProxyClient_ContextFactoryUsedForNilContext(t *testing.T) {
 	factoryCtx := context.WithValue(context.Background(), proxyTestContextKey("source"), "factory")
 

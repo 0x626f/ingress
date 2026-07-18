@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 
 	"github.com/0x626f/ingress/solana/model"
 )
@@ -144,6 +145,7 @@ const (
 	EncodingBase58     Encoding = "base58"
 	EncodingBase64     Encoding = "base64"
 	EncodingBase64Zstd Encoding = "base64+zstd"
+	EncodingJSON       Encoding = "json"
 	EncodingJSONParsed Encoding = "jsonParsed"
 )
 
@@ -182,12 +184,37 @@ type MemcmpFilter struct {
 type ProgramAccountsFilter struct {
 	DataSize uint64        `json:"dataSize,omitempty"`
 	Memcmp   *MemcmpFilter `json:"memcmp,omitempty"`
+	// DataSizeSet distinguishes an explicit dataSize of zero from an unset filter.
+	DataSizeSet bool `json:"-"`
+}
+
+func (filter ProgramAccountsFilter) MarshalJSON() ([]byte, error) {
+	hasDataSize := filter.DataSize != 0 || filter.DataSizeSet
+	if hasDataSize == (filter.Memcmp != nil) {
+		return nil, fmt.Errorf("program accounts filter must set exactly one of dataSize or memcmp")
+	}
+	if filter.Memcmp != nil {
+		return json.Marshal(struct {
+			Memcmp *MemcmpFilter `json:"memcmp"`
+		}{Memcmp: filter.Memcmp})
+	}
+	return json.Marshal(struct {
+		DataSize uint64 `json:"dataSize"`
+	}{DataSize: filter.DataSize})
 }
 
 // TokenAccountsFilter selects token accounts by mint or token program id.
 type TokenAccountsFilter struct {
 	Mint      string `json:"mint,omitempty"`
 	ProgramID string `json:"programId,omitempty"`
+}
+
+func (filter TokenAccountsFilter) MarshalJSON() ([]byte, error) {
+	if (filter.Mint != "") == (filter.ProgramID != "") {
+		return nil, fmt.Errorf("token accounts filter must set exactly one of mint or programId")
+	}
+	type tokenAccountsFilter TokenAccountsFilter
+	return json.Marshal(tokenAccountsFilter(filter))
 }
 
 // SimulateTransactionAccounts requests account snapshots from simulateTransaction.
@@ -198,15 +225,30 @@ type SimulateTransactionAccounts struct {
 
 // BlockProductionRange limits getBlockProduction to a slot range.
 type BlockProductionRange struct {
-	FirstSlot model.Slot `json:"firstSlot,omitempty"`
+	FirstSlot model.Slot `json:"firstSlot"`
 	LastSlot  model.Slot `json:"lastSlot,omitempty"`
+	// LastSlotSet distinguishes an explicit lastSlot of zero from an unset lastSlot.
+	LastSlotSet bool `json:"-"`
+}
+
+func (slotRange BlockProductionRange) MarshalJSON() ([]byte, error) {
+	var lastSlot *model.Slot
+	if slotRange.LastSlot != 0 || slotRange.LastSlotSet {
+		lastSlot = &slotRange.LastSlot
+	}
+	return json.Marshal(struct {
+		FirstSlot model.Slot  `json:"firstSlot"`
+		LastSlot  *model.Slot `json:"lastSlot,omitempty"`
+	}{FirstSlot: slotRange.FirstSlot, LastSlot: lastSlot})
 }
 
 // BlockSubscribeFilterKind selects the stream scope for blockSubscribe.
 type BlockSubscribeFilterKind string
 
 const (
-	BlockSubscribeAll          BlockSubscribeFilterKind = "all"
+	BlockSubscribeAll BlockSubscribeFilterKind = "all"
+	// BlockSubscribeAllWithVotes is retained for source compatibility but is not
+	// accepted by Solana blockSubscribe. Use BlockSubscribeAll instead.
 	BlockSubscribeAllWithVotes BlockSubscribeFilterKind = "allWithVotes"
 )
 
@@ -217,10 +259,16 @@ type BlockSubscribeFilter struct {
 }
 
 func (filter BlockSubscribeFilter) MarshalJSON() ([]byte, error) {
+	if filter.Kind != "" && filter.MentionsAccountOrProgram != "" {
+		return nil, fmt.Errorf("block subscribe filter must set either kind or mentionsAccountOrProgram, not both")
+	}
 	if filter.MentionsAccountOrProgram != "" {
 		return json.Marshal(struct {
 			MentionsAccountOrProgram string `json:"mentionsAccountOrProgram"`
 		}{MentionsAccountOrProgram: filter.MentionsAccountOrProgram})
+	}
+	if filter.Kind != BlockSubscribeAll {
+		return nil, fmt.Errorf("block subscribe filter kind %q is invalid", filter.Kind)
 	}
 	return json.Marshal(filter.Kind)
 }
@@ -240,10 +288,19 @@ type LogsSubscribeFilter struct {
 }
 
 func (filter LogsSubscribeFilter) MarshalJSON() ([]byte, error) {
+	if filter.Kind != "" && len(filter.Mentions) > 0 {
+		return nil, fmt.Errorf("logs subscribe filter must set either kind or mentions, not both")
+	}
 	if len(filter.Mentions) > 0 {
+		if len(filter.Mentions) != 1 || filter.Mentions[0] == "" {
+			return nil, fmt.Errorf("logs subscribe mentions filter must contain exactly one non-empty pubkey")
+		}
 		return json.Marshal(struct {
 			Mentions []string `json:"mentions"`
 		}{Mentions: filter.Mentions})
+	}
+	if filter.Kind != LogsSubscribeAll && filter.Kind != LogsSubscribeAllWithVotes {
+		return nil, fmt.Errorf("logs subscribe filter kind %q is invalid", filter.Kind)
 	}
 	return json.Marshal(filter.Kind)
 }
@@ -294,6 +351,7 @@ type GetProgramAccountsQuery struct {
 	Filters        []ProgramAccountsFilter `json:"filters,omitempty"`
 	WithContext    bool                    `json:"withContext,omitempty"`
 	MinContextSlot model.Slot              `json:"minContextSlot,omitempty"`
+	SortResults    *bool                   `json:"sortResults,omitempty"`
 }
 
 type GetTokenAccountBalanceQuery struct {
@@ -336,13 +394,15 @@ type GetTokenSupplyQuery struct {
 
 type GetFeeForMessageQuery struct {
 	IdentifiedQuery
-	Message    string           `json:"-"`
-	Commitment model.Commitment `json:"commitment,omitempty"`
+	Message        string           `json:"-"`
+	Commitment     model.Commitment `json:"commitment,omitempty"`
+	MinContextSlot model.Slot       `json:"minContextSlot,omitempty"`
 }
 
 type GetLatestBlockhashQuery struct {
 	IdentifiedQuery
-	Commitment model.Commitment `json:"commitment,omitempty"`
+	Commitment     model.Commitment `json:"commitment,omitempty"`
+	MinContextSlot model.Slot       `json:"minContextSlot,omitempty"`
 }
 
 type GetRecentPrioritizationFeesQuery struct {
@@ -368,13 +428,15 @@ type GetSignatureStatusesQuery struct {
 
 type GetTransactionCountQuery struct {
 	IdentifiedQuery
-	Commitment model.Commitment `json:"commitment,omitempty"`
+	Commitment     model.Commitment `json:"commitment,omitempty"`
+	MinContextSlot model.Slot       `json:"minContextSlot,omitempty"`
 }
 
 type IsBlockhashValidQuery struct {
 	IdentifiedQuery
-	Blockhash  string           `json:"-"`
-	Commitment model.Commitment `json:"commitment,omitempty"`
+	Blockhash      string           `json:"-"`
+	Commitment     model.Commitment `json:"commitment,omitempty"`
+	MinContextSlot model.Slot       `json:"minContextSlot,omitempty"`
 }
 
 type RequestAirdropQuery struct {
@@ -393,6 +455,28 @@ type SendTransactionQuery struct {
 	Encoding            Encoding         `json:"encoding,omitempty"`
 	MaxRetries          uint64           `json:"maxRetries,omitempty"`
 	MinContextSlot      model.Slot       `json:"minContextSlot,omitempty"`
+	// MaxRetriesSet distinguishes an explicit maxRetries of zero from an unset value.
+	MaxRetriesSet bool `json:"-"`
+}
+
+func (query SendTransactionQuery) MarshalJSON() ([]byte, error) {
+	var maxRetries *uint64
+	if query.MaxRetries != 0 || query.MaxRetriesSet {
+		maxRetries = &query.MaxRetries
+	}
+	return json.Marshal(struct {
+		SkipPreflight       bool             `json:"skipPreflight,omitempty"`
+		PreflightCommitment model.Commitment `json:"preflightCommitment,omitempty"`
+		Encoding            Encoding         `json:"encoding,omitempty"`
+		MaxRetries          *uint64          `json:"maxRetries,omitempty"`
+		MinContextSlot      model.Slot       `json:"minContextSlot,omitempty"`
+	}{
+		SkipPreflight:       query.SkipPreflight,
+		PreflightCommitment: query.PreflightCommitment,
+		Encoding:            query.Encoding,
+		MaxRetries:          maxRetries,
+		MinContextSlot:      query.MinContextSlot,
+	})
 }
 
 type SimulateTransactionQuery struct {
@@ -415,16 +499,32 @@ type SlotQuery struct {
 
 type GetBlockHeightQuery struct {
 	IdentifiedQuery
-	Commitment model.Commitment `json:"commitment,omitempty"`
+	Commitment     model.Commitment `json:"commitment,omitempty"`
+	MinContextSlot model.Slot       `json:"minContextSlot,omitempty"`
 }
 
 type GetBlockProductionQuery struct {
 	IdentifiedQuery
-	Identity   string                `json:"identity,omitempty"`
-	FirstSlot  model.Slot            `json:"firstSlot,omitempty"`
-	LastSlot   model.Slot            `json:"lastSlot,omitempty"`
+	Identity string `json:"identity,omitempty"`
+	// FirstSlot and LastSlot are deprecated compatibility fields. New code should
+	// set Range; these values are translated into Range and never serialized at
+	// the top level.
+	FirstSlot  model.Slot            `json:"-"`
+	LastSlot   model.Slot            `json:"-"`
 	Range      *BlockProductionRange `json:"range,omitempty"`
 	Commitment model.Commitment      `json:"commitment,omitempty"`
+}
+
+func (query GetBlockProductionQuery) MarshalJSON() ([]byte, error) {
+	normalized, err := normalizeGetBlockProductionQuery(query)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(struct {
+		Identity   string                `json:"identity,omitempty"`
+		Range      *BlockProductionRange `json:"range,omitempty"`
+		Commitment model.Commitment      `json:"commitment,omitempty"`
+	}{Identity: normalized.Identity, Range: normalized.Range, Commitment: normalized.Commitment})
 }
 
 type GetBlocksQuery struct {
@@ -455,7 +555,8 @@ type GetLeaderScheduleQuery struct {
 
 type GetSlotLeaderQuery struct {
 	IdentifiedQuery
-	Commitment model.Commitment
+	Commitment     model.Commitment `json:"commitment,omitempty"`
+	MinContextSlot model.Slot       `json:"minContextSlot,omitempty"`
 }
 
 type GetInflationGovernorQuery struct {
@@ -469,6 +570,20 @@ type GetInflationRewardQuery struct {
 	Epoch          uint64           `json:"epoch,omitempty"`
 	Commitment     model.Commitment `json:"commitment,omitempty"`
 	MinContextSlot model.Slot       `json:"minContextSlot,omitempty"`
+	// EpochSet distinguishes an explicit epoch of zero from an unset epoch.
+	EpochSet bool `json:"-"`
+}
+
+func (query GetInflationRewardQuery) MarshalJSON() ([]byte, error) {
+	var epoch *uint64
+	if query.Epoch != 0 || query.EpochSet {
+		epoch = &query.Epoch
+	}
+	return json.Marshal(struct {
+		Epoch          *uint64          `json:"epoch,omitempty"`
+		Commitment     model.Commitment `json:"commitment,omitempty"`
+		MinContextSlot model.Slot       `json:"minContextSlot,omitempty"`
+	}{Epoch: epoch, Commitment: query.Commitment, MinContextSlot: query.MinContextSlot})
 }
 
 type GetStakeMinimumDelegationQuery struct {
@@ -484,12 +599,14 @@ type GetSupplyQuery struct {
 
 type GetEpochInfoQuery struct {
 	IdentifiedQuery
-	Commitment model.Commitment
+	Commitment     model.Commitment `json:"commitment,omitempty"`
+	MinContextSlot model.Slot       `json:"minContextSlot,omitempty"`
 }
 
 type GetSlotQuery struct {
 	IdentifiedQuery
-	Commitment model.Commitment
+	Commitment     model.Commitment `json:"commitment,omitempty"`
+	MinContextSlot model.Slot       `json:"minContextSlot,omitempty"`
 }
 
 type GetSlotLeadersQuery struct {
@@ -508,8 +625,12 @@ type GetTransactionQuery struct {
 
 type GetBlockQuery struct {
 	IdentifiedQuery
-	Slot       model.Slot
-	Commitment model.Commitment
+	Slot                           model.Slot         `json:"-"`
+	Commitment                     model.Commitment   `json:"commitment,omitempty"`
+	Encoding                       Encoding           `json:"encoding,omitempty"`
+	TransactionDetails             TransactionDetails `json:"transactionDetails,omitempty"`
+	Rewards                        *bool              `json:"rewards,omitempty"`
+	MaxSupportedTransactionVersion *uint64            `json:"maxSupportedTransactionVersion,omitempty"`
 }
 
 type GetConfirmedSlotsQuery struct {
